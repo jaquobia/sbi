@@ -26,5 +26,6 @@ pub struct SBIConfig {
 #[derive(Serialize, Deserialize)]
 pub struct SBILaunchMessageJson {
     pub exececutable_path: PathBuf,
+    pub instance_path: Option<PathBuf>,
     pub ld_library_path: Option<PathBuf>,
 }

@@ -3,14 +3,12 @@ use std::{
     fs,
     io::{self, stdout},
     path::{Path, PathBuf},
-    process::Stdio,
 };
 
 use crate::{game_launcher, json::{InstanceDataJson, SBIConfig, SBILaunchMessageJson}};
 use crate::{
     instance::{Instance, ModifyInstance},
     workshop_downloader, LOCAL_PIPE_NAME, SBI_CONFIG_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME,
-    STARBOUND_STEAM_ID,
 };
 use anyhow::{anyhow, Result};
 use crossterm::{
@@ -20,7 +18,7 @@ use crossterm::{
 };
 use futures::AsyncWriteExt;
 use itertools::{Either, Itertools};
-use log::{error, info};
+use log::error;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -90,7 +88,6 @@ pub struct AppSBI {
     proj_dirs: ProjectDirs,
     sender: UnboundedSender<SBILaunchMessageJson>,
     config: SBIConfig,
-    starbound_process: Option<std::thread::JoinHandle<()>>,
     should_quit: bool,
     debug: String,
 }
@@ -181,7 +178,6 @@ impl AppSBI {
             proj_dirs: dirs,
             sender,
             config,
-            starbound_process: None,
             should_quit: false,
             debug: String::new(),
         }
@@ -341,7 +337,7 @@ impl AppSBI {
         game_launcher::launch_instance_cli(&executable_path, instance_dir, Some(&sb_ld_path))
     }
     pub fn launch_instance_steam(&mut self) -> Result<()> {
-        let (executable_name, bootconfig) = {
+        let (executable_name, bootconfig, instance_path) = {
             let instance = self.get_instance_current()?;
             let executable_name = instance
                 .executable()
@@ -351,7 +347,7 @@ impl AppSBI {
             let bootconfig = instance
                 .folder_path()
                 .join(STARBOUND_BOOT_CONFIG_NAME);
-            (executable_name, bootconfig)
+            (executable_name, bootconfig, instance.folder_path())
         };
         let (executable_path, sb_ld_path) = {
             let executable = self
@@ -371,7 +367,7 @@ impl AppSBI {
                 .unwrap_or(exec_parent_path);
             (executable_path, sb_ld_path)
         };
-        let launch_message = SBILaunchMessageJson { exececutable_path: executable_path, ld_library_path: Some(sb_ld_path) };
+        let launch_message = SBILaunchMessageJson { exececutable_path: executable_path, instance_path: Some(instance_path.to_path_buf()), ld_library_path: Some(sb_ld_path) };
         self.sender
             .send(launch_message)?;
         game_launcher::launch_instance_steam(Some(&bootconfig))
