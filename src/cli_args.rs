@@ -5,5 +5,8 @@ use clap::Parser;
 pub struct CliArgs {
     /// Start the application in query mode
     #[arg(short, long)]
-    pub query: bool
+    pub query: bool,
+
+    #[arg(last=true)]
+    pub default_command: Option<Vec<String>>,
 }

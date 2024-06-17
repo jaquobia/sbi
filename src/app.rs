@@ -6,7 +6,7 @@ use std::{
     process::Stdio,
 };
 
-use crate::json::{InstanceDataJson, SBIConfig};
+use crate::{game_launcher, json::{InstanceDataJson, SBIConfig, SBILaunchMessageJson}};
 use crate::{
     instance::{Instance, ModifyInstance},
     workshop_downloader, LOCAL_PIPE_NAME, SBI_CONFIG_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME,
@@ -88,7 +88,7 @@ pub struct AppSBI {
     instance_index: usize,
     default_executable: String,
     proj_dirs: ProjectDirs,
-    sender: UnboundedSender<String>,
+    sender: UnboundedSender<SBILaunchMessageJson>,
     config: SBIConfig,
     starbound_process: Option<std::thread::JoinHandle<()>>,
     should_quit: bool,
@@ -98,7 +98,7 @@ pub struct AppSBI {
 impl AppSBI {
     /// Run app and enter alternate TUI screen until app is finished
     pub async fn run(proj_dirs: ProjectDirs) -> Result<()> {
-        let (sender, reciver) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let (sender, reciver) = tokio::sync::mpsc::unbounded_channel::<SBILaunchMessageJson>();
 
         tokio::spawn(async {
             let mut reciver = reciver;
@@ -122,7 +122,8 @@ impl AppSBI {
                 let (_, mut writer) = conn.into_split();
                 match reciver.try_recv() {
                     Ok(x) => {
-                        writer.write_all(x.as_bytes()).await?;
+                       let bytes = serde_json::to_vec::<SBILaunchMessageJson>(&x)?;
+                       writer.write_all(&bytes).await?;
                     }
                     Err(_) => {
                         continue;
@@ -170,7 +171,7 @@ impl AppSBI {
     }
 
     /// Create a new app from the project directory struct
-    pub fn new(dirs: ProjectDirs, sender: UnboundedSender<String>) -> Self {
+    pub fn new(dirs: ProjectDirs, sender: UnboundedSender<SBILaunchMessageJson>) -> Self {
         let config = Self::load_or_generate_config(dirs.data_dir());
         Self {
             popup: None,
@@ -315,6 +316,7 @@ impl AppSBI {
     }
     pub fn launch_instance_cli(&mut self) -> Result<()> {
         let instance = self.get_instance_current()?;
+        let instance_dir = instance.folder_path();
         let executable_name: String = instance
             .executable()
             .as_ref()
@@ -326,9 +328,6 @@ impl AppSBI {
             .get(&executable_name)
             .ok_or(anyhow!("Executable Name does not belong to an executable"))?;
         let executable_path = PathBuf::from(&executable.bin);
-
-        // Calculate ld_path
-        let os_ld_library_name = "LD_LIBRARY_PATH";
         let exec_parent_path = executable_path
             .parent()
             .ok_or(anyhow!("Executable path doesn't have a parent folder?!"))?
@@ -338,36 +337,8 @@ impl AppSBI {
             .clone()
             .map(PathBuf::from)
             .unwrap_or(exec_parent_path.clone());
-        let mut ld_paths = vec![sb_ld_path];
-        if let Ok(system_ld_path) = std::env::var(os_ld_library_name) {
-            ld_paths.extend(std::env::split_paths(&system_ld_path));
-        };
-        let new_ld_path_var = std::env::join_paths(ld_paths)?;
 
-        info!(
-            "Launching {} with ld_path: {:?}",
-            executable_path.display(),
-            new_ld_path_var
-        );
-
-        let mut command = tokio::process::Command::new(executable_path.clone());
-        let instance_dir = instance.folder_path();
-        command.current_dir(instance_dir);
-        let bootconfig = instance_dir
-            .join(STARBOUND_BOOT_CONFIG_NAME)
-            .display()
-            .to_string();
-        command.env(os_ld_library_name, new_ld_path_var);
-        command.args(["-bootconfig", &bootconfig]);
-        command.stdout(Stdio::null()).stderr(Stdio::null()); // This little shit line caused me so
-                                                             // many issues with zombie processes.
-                                                             // Remember to unhook stdio for
-                                                             // children you give up
-
-        // This async thread is not necessary as we don't want to own children
-        // but this also causes no harm
-        tokio::task::spawn(async move { command.spawn()?.wait().await });
-        Ok(())
+        game_launcher::launch_instance_cli(&executable_path, instance_dir, Some(&sb_ld_path))
     }
     pub fn launch_instance_steam(&mut self) -> Result<()> {
         let (executable_name, bootconfig) = {
@@ -379,9 +350,7 @@ impl AppSBI {
                 .to_owned();
             let bootconfig = instance
                 .folder_path()
-                .join(STARBOUND_BOOT_CONFIG_NAME)
-                .display()
-                .to_string();
+                .join(STARBOUND_BOOT_CONFIG_NAME);
             (executable_name, bootconfig)
         };
         let (executable_path, sb_ld_path) = {
@@ -402,14 +371,10 @@ impl AppSBI {
                 .unwrap_or(exec_parent_path);
             (executable_path, sb_ld_path)
         };
+        let launch_message = SBILaunchMessageJson { exececutable_path: executable_path, ld_library_path: Some(sb_ld_path) };
         self.sender
-            .send(format!("{}:{}", executable_path.display(), sb_ld_path.display()).to_string())?;
-        let mut command = tokio::process::Command::new("steam");
-        command.args(["-applaunch", STARBOUND_STEAM_ID, "-bootconfig", &bootconfig]);
-        command.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = command.spawn()?;
-        tokio::task::spawn(async move { child.wait().await });
-        Ok(())
+            .send(launch_message)?;
+        game_launcher::launch_instance_steam(Some(&bootconfig))
     }
     pub fn generate_sbinit_config(&self) -> Result<()> {
         let instance = self.get_instance_current()?;

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use rustc_hash::FxHashMap as HashMap;
 use serde::{Deserialize, Serialize};
 
@@ -19,4 +21,10 @@ pub struct SBIConfigExecutable {
 #[derive(Serialize, Deserialize, Default)]
 pub struct SBIConfig {
     pub executables: HashMap<String, SBIConfigExecutable>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SBILaunchMessageJson {
+    pub exececutable_path: PathBuf,
+    pub ld_library_path: Option<PathBuf>,
 }
