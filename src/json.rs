@@ -21,6 +21,7 @@ pub struct SBIConfigExecutable {
 #[derive(Serialize, Deserialize, Default)]
 pub struct SBIConfig {
     pub executables: HashMap<String, SBIConfigExecutable>,
+    pub vanilla_assets: PathBuf,
 }
 
 #[derive(Serialize, Deserialize)]

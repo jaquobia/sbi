@@ -200,6 +200,7 @@ impl AppSBI {
         Self::read_json_from_string(data_dir).unwrap_or_else(|_| {
             let config = SBIConfig {
                 executables: rustc_hash::FxHashMap::default(),
+                vanilla_assets: PathBuf::new()
             };
             // TODO: we probably should care
             let _we_dont_care = Self::write_config(data_dir, &config);
@@ -299,7 +300,7 @@ impl AppSBI {
         let instance =
             Instance::from_json(instance_data_json, &instance_dir.join(INSTANCE_JSON_NAME))?;
         write_instance(&instance)?;
-        self.generate_sbinit_config()?;
+        self.generate_sbinit_config(&instance)?;
         self.update_instances()?;
         Ok(())
     }
@@ -372,8 +373,7 @@ impl AppSBI {
             .send(launch_message)?;
         game_launcher::launch_instance_steam(Some(&bootconfig))
     }
-    pub fn generate_sbinit_config(&self) -> Result<()> {
-        let instance = self.get_instance_current()?;
+    pub fn generate_sbinit_config(&self, instance: &Instance) -> Result<()> {
         let instance_folder = instance.folder_path();
         let sbinit_config_path = instance_folder.join(STARBOUND_BOOT_CONFIG_NAME);
         let executable = instance
@@ -384,7 +384,7 @@ impl AppSBI {
             .ok_or(anyhow!("Invalid Executable: {:?}", instance.executable()))?;
         let maybe_executable_assets = executable.custom_assets.as_ref();
         let mod_assets = instance_folder.join("mods");
-        let vanilla_assets = self.proj_dirs.data_dir().join("assets");
+        let vanilla_assets = self.config.vanilla_assets.clone();
         let maybe_additional_assets = instance.additional_assets();
         let storage_folder = instance_folder.join("storage");
 
@@ -426,7 +426,9 @@ impl AppSBI {
         if let Ok(instance) = self.get_instance_current_mut() {
             instance.modify(modification);
             write_instance(instance)?;
-            self.generate_sbinit_config()?;
+            // This is annoying because we are inside a mut borrowing block of self
+            let instance = self.get_instance_current().unwrap();
+            self.generate_sbinit_config(instance)?;
         }
         self.update_instances()
     }
