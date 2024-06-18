@@ -43,7 +43,7 @@ impl UIComponent<AppMessage> for ConfirmationPopup<AppMessage> {
     }
     fn ui(&self, buffer: &mut ratatui::prelude::Buffer, area: ratatui::prelude::Rect) {
         use ratatui::layout::Constraint as C;
-        let confirmation_border_style = Style::default().bg(Color::DarkGray);
+        let confirmation_border_style = Style::default().bg(Color::Indexed(233));
         let confirmation_text_style = Style::default();
         let confirmation_button_unselected_style = Style::default();
         let confirmation_button_selected_style = Style::default().fg(Color::LightYellow);
@@ -62,7 +62,7 @@ impl UIComponent<AppMessage> for ConfirmationPopup<AppMessage> {
         let width = C::Length(u16::max(button_text_width, text_width) + 4);
         let height = C::Length(4 + text_height);
         let dialog_area = ui::center_box(area, width, height);
-        let border = Block::default().borders(Borders::ALL).title("Confirmation").style(confirmation_border_style);
+        let border = Block::default().borders(Borders::ALL).title("Confirmation").style(confirmation_border_style).border_type(ratatui::widgets::BorderType::Rounded);
         Clear.render(dialog_area, buffer);
         let dialog_area_inner = border.inner(dialog_area);
         border.render(dialog_area, buffer);
