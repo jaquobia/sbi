@@ -7,6 +7,7 @@ SBI is in a very experimental state, so stability is not guaranteed and the fold
 
 # Installing
 TODO - binary installation  
+SBI relies on `steamcmd` for downloading mods from the workshop, without it, updating a collection will do nothing.
 Until an official method for installing is put together, you will just have to rely on the good 'ol `git clone -b rust https://github.com/jaquobia/sbi.git` 
 and `cargo install --path ./sbi`. Make sure `$CARGO_HOME/bin` is in your PATH.
 
@@ -41,8 +42,7 @@ Example:
     },
     "xsb2": {
       "bin": "/home/USER/.local/share/Steam/steamapps/common/Starbound/xsb-linux/xclient",
-      "custom_assets": "../../xsb-assets",
-      "ld_path": "../../linux"
+      "custom_assets": "../../xsb-assets"
     }
   },
   "vanilla_assets": "/home/USER/.local/share/Steam/steamapps/common/Starbound/assets"
