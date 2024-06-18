@@ -18,7 +18,7 @@ the vanilla launch with `%command%` if launched from the Steam play button (game
 
 Also by default, sbi will have no idea where executables and assets are (To be implemented).
 Sbi expects a "vanilla" executable to be defined as it is the default executable name.
-Executable and asset definitions and will need to be created in `$XDG_DATA_HOME/sbi/config.json`:  
+Executable and asset definitions will need to be created in `$XDG_DATA_HOME/sbi/config.json`:  
 ```json
 {
   "executables": {
@@ -31,7 +31,7 @@ Executable and asset definitions and will need to be created in `$XDG_DATA_HOME/
 ```
 If an executable has a required assets pak/folder other than the vanilla assets, then add `"custom_assets": "path/to/asset/containing/dir/relative/to/bin"`.  
 If an executable has a required library such as steam_api and it is NOT beside the executable, then add `"ld_path": "path/to/ld/containing/dir/relative/to/bin"`.
-(All required libraries are expected to be in a single folder, might change in the future as well as the required relative paths)  
+(All required libraries are expected to be in a single folder, this might change in the future as well as the required relative paths)  
 Example:
 ```json
 {
