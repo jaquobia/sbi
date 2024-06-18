@@ -1,8 +1,5 @@
 use std::{
-    cell::RefCell,
-    fs,
-    io::{self, stdout},
-    path::{Path, PathBuf},
+    cell::RefCell, fs, io::{self, stdout}, ops::Rem, path::{Path, PathBuf}
 };
 
 use crate::{game_launcher, json::{InstanceDataJson, SBIConfig, SBILaunchMessageJson}};
@@ -232,9 +229,16 @@ impl AppSBI {
     /// Get available instances from storage and set the instances array
     /// TODO: Ensure instance index is valid after update (Possible: Make new update_index fn?)
     pub fn update_instances(&mut self) -> Result<()> {
+        // The instance we want to find again
+        let current_instance_name = self.get_instance_current().ok().map(|i|i.name().to_string());
         let instances_dir = self.instances_dir()?;
-        let instances = parse_instance_paths_to_json(&get_instance_json_paths(&instances_dir)?);
+        let mut instances = parse_instance_paths_to_json(&get_instance_json_paths(&instances_dir)?);
+        instances.sort_by(|i1, i2| i1.name().cmp(i2.name()));
+
         self.set_instances(instances);
+        if let Some(index) = current_instance_name.and_then(|name| self.instances.iter().position(|i| name.eq(i.name()))) {
+            self.instance_index = index;
+        }
         Ok(())
     }
     /// Set the instances array
@@ -271,16 +275,22 @@ impl AppSBI {
     pub fn get_instances(&self) -> &[Instance] {
         &self.instances
     }
-    /// Scroll the instance index up (subtracting 1), or stop at 0
+    /// Scroll the instance index up (subtracting 1), or wrapping at 0
     pub fn scroll_instances_up(&mut self) {
-        self.instance_index = self.instance_index.saturating_sub(1);
+        if self.instance_index == 0 {
+            self.instance_index = self.instances.len().saturating_sub(1);
+        } else {
+            self.instance_index = self.instance_index.saturating_sub(1);
+        }
     }
-    /// Scroll the instance index down (adding 1), or stop at the last element
+    /// Scroll the instance index down (adding 1), or wrapping at the last element
     pub fn scroll_instances_down(&mut self) {
-        self.instance_index = self
-            .instance_index
-            .saturating_add(1)
-            .min(self.instances.len().saturating_sub(1));
+        if !self.instances.is_empty() {
+            self.instance_index = self
+                .instance_index
+                .saturating_add(1)
+                .rem(self.instances.len());
+        }
     }
 
     pub fn open_popup(&mut self, popup: BoxedConsumablePopup<AppMessage>) {
@@ -307,10 +317,12 @@ impl AppSBI {
         Ok(())
     }
     pub fn delete_current_instance(&mut self) -> Result<()> {
-        let instance_path = self.get_instance_current()?.folder_path();
-        fs::remove_dir_all(instance_path)?;
-        self.update_instances()?;
-        self.scroll_instances_up();
+        if let Ok(instance) = self.get_instance_current() {
+            let instance_path = instance.folder_path();
+            fs::remove_dir_all(instance_path)?;
+            self.update_instances()?;
+            self.scroll_instances_up();
+        }
         Ok(())
     }
     pub fn launch_instance_cli(&mut self) -> Result<()> {
