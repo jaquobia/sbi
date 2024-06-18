@@ -7,6 +7,13 @@ pub mod rename_instance;
 pub mod launch_instance;
 pub mod modify_instance_executable;
 
+/// Return true if the information is valid:
+/// - Name is non-empty and alphanumerics
+pub fn is_instance_name_valid(name: &str) -> bool {
+    let name = name.trim();
+    !name.is_empty() && name.chars().all(|c| char::is_alphanumeric(c) || matches!(c, '_' | '-' | ' '))
+}
+
 /// Trait that reprersents a UIComponent which can be consumed and transformed into a message
 pub trait ConsumablePopup<T>: UIComponent<T> {
     /// Transform Self into a message of type T

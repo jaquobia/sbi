@@ -57,7 +57,7 @@ impl NewInstancePopup {
     /// Reapply the styles for stateful widgets (text area and spinner)
     fn update(&mut self) {
         let border_style = 
-            if !self.is_valid() {
+            if !super::is_instance_name_valid(&self.get_instance_name()) {
                 Style::default().fg(Color::Red)
             } else if self.option_interactable == 0 {
                 Style::default().fg(Color::LightYellow)
@@ -98,11 +98,6 @@ impl NewInstancePopup {
 
     }
 
-    /// Return true if the information is valid:
-    /// - Name is non-empty
-    fn is_valid(&self) -> bool {
-        !self.get_instance_name().is_empty()
-    }
 }
 
 impl UIComponent<AppMessage> for NewInstancePopup {
@@ -137,36 +132,39 @@ impl UIComponent<AppMessage> for NewInstancePopup {
     }
 
     fn handle_event(&mut self, event: &Event) -> Option<AppMessage> {
-        if let Event::Key(key) = event {
-            if key.kind != event::KeyEventKind::Press { return None; }
-            match key.code {
-                // Press enter over [Ok] button
-                KeyCode::Enter if self.option_interactable == 3 => {
-                    if self.is_valid() {
-                        return Some(AppMessage::ClosePopup);
+        match event {
+            Event::Key(key) if key.kind == event::KeyEventKind::Press => {
+                // TODO: handle paste events with custom keybinds
+                match key.code {
+                    // Press enter over [Ok] button
+                    KeyCode::Enter if self.option_interactable == 3 => {
+                        if super::is_instance_name_valid(&self.get_instance_name()) {
+                            return Some(AppMessage::ClosePopup);
+                        }
+                    },
+                    KeyCode::Enter => { }, // noop
+                    KeyCode::Up => {
+                        self.option_interactable = self.option_interactable.saturating_sub(1);
+                        self.update();
+                    },
+                    KeyCode::Down => {
+                        self.option_interactable = self.option_interactable.saturating_add(1).min(3);
+                        self.update();
+                    },
+                    _ => {
+                        match self.option_interactable {
+                            // Name Text area
+                            0 => { if self.instance_name.input_without_shortcuts(*key) { self.update(); } },
+                            // Spinner
+                            1 => { self.exec_spinner.input(*key); },
+                            // Collection ID Text area
+                            2 => { if self.collection_text.input(*key) { self.update(); } }
+                            _ => {},
+                        }
                     }
-                },
-                KeyCode::Enter => { }, // noop
-                KeyCode::Up => {
-                    self.option_interactable = self.option_interactable.saturating_sub(1);
-                    self.update();
-                },
-                KeyCode::Down => {
-                    self.option_interactable = self.option_interactable.saturating_add(1).min(3);
-                    self.update();
                 }
-                _ => {
-                    match self.option_interactable {
-                        // Name Text area
-                        0 => { if self.instance_name.input_without_shortcuts(*key) { self.update(); } },
-                        // Spinner
-                        1 => { self.exec_spinner.input(*key); },
-                        // Collection ID Text area
-                        2 => { if self.collection_text.input(*key) { self.update(); } }
-                        _ => {},
-                    }
-                }
-            }
+            },
+            _ => {}
         }
         None
     }

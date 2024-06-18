@@ -145,6 +145,7 @@ impl AppSBI {
                 // intentionally ignore errors here since we're already in a panic
                 let _ = restore_tui();
                 original_hook(panic_info);
+                println!();
             }));
         }
 
@@ -290,11 +291,12 @@ impl AppSBI {
     }
     pub fn create_instance(&mut self, instance_data_json: InstanceDataJson) -> Result<()> {
         let instances_dir = self.instances_dir()?;
-        let mut instance_dir = instances_dir.join(instance_data_json.name.clone());
+        let name = instance_data_json.name.replace(' ', "_");
+        let mut instance_dir = instances_dir.join(&name);
         // Folders with the same name does not exactly mean instances with the same name
         let mut i: usize = 1;
         while instance_dir.exists() {
-            instance_dir = instances_dir.join(format!("{}_{}", &instance_data_json.name, i));
+            instance_dir = instances_dir.join(format!("{}_{}", &name, i));
             i += 1;
         }
         let instance =
@@ -551,10 +553,10 @@ fn handle_event_home(event: Event, app: &AppSBI) -> Option<AppMessage> {
                     ),
                 )));
             }
-            KeyCode::Up | KeyCode::Char('j') => {
+            KeyCode::Up | KeyCode::Char('k') => {
                 return Some(AppMessage::ScrollInstancesUp);
             }
-            KeyCode::Down | KeyCode::Char('k') => {
+            KeyCode::Down | KeyCode::Char('j') => {
                 return Some(AppMessage::ScrollInstancesDown);
             }
             KeyCode::Enter => {
@@ -724,8 +726,8 @@ fn ui(frame: &mut Frame, app: &AppSBI) {
     // Draw Status and Keybinds
     let keys = [
         ("Q", "Quit"),
-        ("↑/j", "Up"),
-        ("↓/k", "Down"),
+        ("↑/k", "Up"),
+        ("↓/j", "Down"),
         ("Enter", "Run Options"),
         ("n", "New Instance"),
         ("m", "Modify Instance"),
