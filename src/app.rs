@@ -13,7 +13,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use futures::AsyncWriteExt;
 use itertools::{Either, Itertools};
 use log::error;
 use ratatui::{prelude::*, widgets::*};
@@ -81,7 +80,6 @@ pub struct AppSBI {
     popup: Option<RefCell<BoxedConsumablePopup<AppMessage>>>,
     instances: Vec<Instance>,
     instance_index: usize,
-    default_executable: String,
     proj_dirs: ProjectDirs,
     sender: UnboundedSender<SBILaunchMessageJson>,
     config: SBIConfig,
@@ -94,35 +92,45 @@ impl AppSBI {
     pub async fn run(proj_dirs: ProjectDirs) -> Result<()> {
         let (sender, reciver) = tokio::sync::mpsc::unbounded_channel::<SBILaunchMessageJson>();
 
+        let listener = match interprocess::local_socket::tokio::LocalSocketListener::bind(
+            LOCAL_PIPE_NAME,
+        ) {
+            Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
+                // eprintln!("Error: could not start server because the socket file is occupied. Please check if {} is in use by another process and try again.", LOCAL_PIPE_NAME);
+                // let var_name: Result<()> = Err(e.into());
+                // return var_name;
+                return Err(anyhow!("SBI is already running somewhere..."))
+            }
+            Err(e) => {
+                return Err(e.into());
+            }
+            Ok(x) => x,
+        };
         tokio::spawn(async {
-            let mut reciver = reciver;
 
-            let listener = match interprocess::local_socket::tokio::LocalSocketListener::bind(
-                LOCAL_PIPE_NAME,
-            ) {
-                Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
-                    eprintln!("Error: could not start server because the socket file is occupied. Please check if {} is in use by another process and try again.", LOCAL_PIPE_NAME);
-                    let var_name: Result<()> = Err(e.into());
-                    return var_name;
-                }
-                Err(e) => {
-                    return Err(e.into());
-                }
-                Ok(x) => x,
-            };
-
-            loop {
+            // "async block doesn't return Result type" so wrapping failable code in a function
+            async fn accept_client(listener: &interprocess::local_socket::tokio::LocalSocketListener, reciver: &mut tokio::sync::mpsc::UnboundedReceiver<SBILaunchMessageJson>) -> Result<()> {
                 let conn = listener.accept().await?;
                 let (_, mut writer) = conn.into_split();
                 match reciver.try_recv() {
                     Ok(x) => {
                        let bytes = serde_json::to_vec::<SBILaunchMessageJson>(&x)?;
-                       writer.write_all(&bytes).await?;
+                       futures::AsyncWriteExt::write_all(&mut writer, &bytes).await?;
                     }
                     Err(_) => {
-                        continue;
+                        return Ok(());
                     }
                 }
+                Ok(())
+            }
+
+            let mut reciver = reciver;
+            let listener = listener;
+
+            loop {
+                match accept_client(&listener, &mut reciver).await {
+                    Ok(()) | Err(_) => {},
+                };
             }
         });
 
@@ -172,7 +180,6 @@ impl AppSBI {
             popup: None,
             instances: Vec::new(),
             instance_index: 0,
-            default_executable: String::from("vanilla"),
             proj_dirs: dirs,
             sender,
             config,
@@ -196,10 +203,7 @@ impl AppSBI {
     /// default values if config is missing
     fn load_or_generate_config(data_dir: &Path) -> SBIConfig {
         Self::read_json_from_string(data_dir).unwrap_or_else(|_| {
-            let config = SBIConfig {
-                executables: rustc_hash::FxHashMap::default(),
-                vanilla_assets: PathBuf::new()
-            };
+            let config = SBIConfig::default();
             // TODO: we probably should care
             let _we_dont_care = Self::write_config(data_dir, &config);
             config
@@ -331,7 +335,7 @@ impl AppSBI {
         let executable_name: String = instance
             .executable()
             .as_ref()
-            .unwrap_or(&self.default_executable)
+            .unwrap_or(&self.config.default_executable)
             .to_owned();
         let executable = self
             .config
@@ -357,7 +361,7 @@ impl AppSBI {
             let executable_name = instance
                 .executable()
                 .as_ref()
-                .unwrap_or(&self.default_executable)
+                .unwrap_or(&self.config.default_executable)
                 .to_owned();
             let bootconfig = instance
                 .folder_path()
@@ -394,7 +398,7 @@ impl AppSBI {
             .executable()
             .as_ref()
             .and_then(|e| self.config.executables.get(e))
-            .or_else(|| self.config.executables.get(&self.default_executable))
+            .or_else(|| self.config.executables.get(&self.config.default_executable))
             .ok_or(anyhow!("Invalid Executable: {:?}", instance.executable()))?;
         let maybe_executable_assets = executable.custom_assets.as_ref();
         let mod_assets = instance_folder.join("mods");
@@ -675,7 +679,7 @@ fn draw_home(area: Rect, buffer: &mut Buffer, app: &AppSBI) {
                 format!("{}", executable)
             }
             None => {
-                format!("Default({})", app.default_executable)
+                format!("Default({})", app.config.default_executable)
             }
         };
         let line_1 = Line::from(vec![

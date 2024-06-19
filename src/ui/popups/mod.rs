@@ -4,7 +4,6 @@ pub mod new_instance;
 pub mod confirmation;
 pub mod list_select;
 pub mod rename_instance;
-pub mod launch_instance;
 pub mod modify_instance_executable;
 
 /// Return true if the information is valid:

@@ -18,10 +18,14 @@ pub struct SBIConfigExecutable {
     pub custom_assets: Option<String>,
 }
 
+fn default_executable() -> String { String::from("vanilla") }
+
 #[derive(Serialize, Deserialize, Default)]
 pub struct SBIConfig {
     pub executables: HashMap<String, SBIConfigExecutable>,
     pub vanilla_assets: PathBuf,
+    #[serde(default = "default_executable")]
+    pub default_executable: String,
 }
 
 #[derive(Serialize, Deserialize)]
