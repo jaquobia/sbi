@@ -14,6 +14,7 @@ mod app;
 mod workshop_downloader;
 mod game_launcher;
 mod mod_manifest;
+mod core;
 
 static ORGANIZATION_QUALIFIER: &str = "com";
 static ORGANIZATION_NAME: &str = "";
@@ -47,19 +48,9 @@ async fn main() -> Result<()> {
 
                 let executable_path = launch_message.exececutable_path;
                 let maybe_extra_ld_path = launch_message.ld_library_path.as_deref();
-                let instance_path = if let Some(instance_path) = launch_message.instance_path {
-                    instance_path
-                } else {
-                    std::env::current_dir()?
-                };
+                let instance_path = launch_message.instance_path.unwrap_or_else(|| std::env::current_dir().expect("Current working directory cannot be read from"));
                 game_launcher::launch_instance_cli(&executable_path, &instance_path, maybe_extra_ld_path)?;
 
-                // let mut message = launch_message.exececutable_path.display().to_string();
-                // if let Some(ld_path) = launch_message.ld_library_path {
-                //     message.push(':');
-                //     message.push_str(&ld_path.display().to_string());
-                //     println!("{message}");
-                // }
             },
             Err(_) => {
                 warn!("Could not connect to sbi client!");

@@ -53,13 +53,6 @@ fn get_instance_json_paths(instances_dir: &std::path::Path) -> Result<Vec<PathBu
     Ok(instances)
 }
 
-fn write_instance(instance: &Instance) -> Result<()> {
-    let instance_path = instance.folder_path();
-    fs::create_dir_all(instance_path)?;
-    let instance_data = serde_json::to_string(instance.to_json())?;
-    fs::write(instance_path.join("instance.json"), instance_data)?;
-    Ok(())
-}
 
 pub enum AppMessage {
     Quit,
@@ -305,25 +298,13 @@ impl AppSBI {
     }
     pub fn create_instance(&mut self, instance_data_json: InstanceDataJson) -> Result<()> {
         let instances_dir = self.instances_dir()?;
-        let name = instance_data_json.name.replace(' ', "_");
-        let mut instance_dir = instances_dir.join(&name);
-        // Folders with the same name does not exactly mean instances with the same name
-        let mut i: usize = 1;
-        while instance_dir.exists() {
-            instance_dir = instances_dir.join(format!("{}_{}", &name, i));
-            i += 1;
-        }
-        let instance =
-            Instance::from_json(instance_data_json, &instance_dir.join(INSTANCE_JSON_NAME))?;
-        write_instance(&instance)?;
-        self.generate_sbinit_config(&instance)?;
+        crate::core::create_instance(&instances_dir, instance_data_json, &self.config)?;
         self.update_instances()?;
         Ok(())
     }
     pub fn delete_current_instance(&mut self) -> Result<()> {
         if let Ok(instance) = self.get_instance_current() {
-            let instance_path = instance.folder_path();
-            fs::remove_dir_all(instance_path)?;
+            crate::core::delete_instance(instance);
             self.update_instances()?;
             self.scroll_instances_up();
         }
@@ -391,62 +372,9 @@ impl AppSBI {
             .send(launch_message)?;
         game_launcher::launch_instance_steam(Some(&bootconfig))
     }
-    pub fn generate_sbinit_config(&self, instance: &Instance) -> Result<()> {
-        let instance_folder = instance.folder_path();
-        let sbinit_config_path = instance_folder.join(STARBOUND_BOOT_CONFIG_NAME);
-        let executable = instance
-            .executable()
-            .as_ref()
-            .and_then(|e| self.config.executables.get(e))
-            .or_else(|| self.config.executables.get(&self.config.default_executable))
-            .ok_or(anyhow!("Invalid Executable: {:?}", instance.executable()))?;
-        let maybe_executable_assets = executable.custom_assets.as_ref();
-        let mod_assets = instance_folder.join("mods");
-        let vanilla_assets = self.config.vanilla_assets.clone();
-        let maybe_additional_assets = instance.additional_assets();
-        let storage_folder = instance_folder.join("storage");
-
-        let mut assets = [vanilla_assets, mod_assets]
-            .into_iter()
-            .map(|p| p.to_string_lossy().to_string())
-            .collect_vec();
-        if let Some(executable_assets) = maybe_executable_assets {
-            let executable_assets = PathBuf::from(&executable.bin)
-                .parent()
-                .unwrap()
-                .join(executable_assets)
-                .to_string_lossy()
-                .to_string();
-            assets.push(executable_assets);
-        }
-        if let Some(additional_assets) = maybe_additional_assets {
-            // TODO: ~~apply instance_folder joining to the asset folder ONLY if its not a full path~~
-            // Check if this works
-            let additional_assets = additional_assets.iter().map(|f_name| {
-                let p = PathBuf::from(f_name);
-                if p.is_relative() {
-                    instance_folder.join(p).to_string_lossy().to_string()
-                } else {
-                    f_name.to_owned()
-                }
-            });
-            assets.extend(additional_assets);
-        }
-        let sbconfig_json = serde_json::json!({
-            "assetDirectories": assets,
-            "storageDirectory": storage_folder
-        });
-
-        let json_string = serde_json::to_string(&sbconfig_json)?;
-        std::fs::write(sbinit_config_path, json_string).map_err(|e| anyhow!(e))
-    }
     pub fn modify_instance(&mut self, modification: ModifyInstance) -> Result<()> {
         if let Ok(instance) = self.get_instance_current_mut() {
-            instance.modify(modification);
-            write_instance(instance)?;
-            // This is annoying because we are inside a mut borrowing block of self
-            let instance = self.get_instance_current().unwrap();
-            self.generate_sbinit_config(instance)?;
+            crate::core::modify_instance(instance.clone(), modification, &self.config)?;
         }
         self.update_instances()
     }
