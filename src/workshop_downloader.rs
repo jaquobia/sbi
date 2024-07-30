@@ -1,6 +1,6 @@
 use std::{os::fd::{AsFd, AsRawFd, FromRawFd}, path::Path, process::Stdio};
 
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
@@ -47,12 +47,12 @@ struct PublishedFileDetails {
 #[derive(Serialize, Deserialize, Debug)]
 struct PublishedFileChildren {
     publishedfileid: String,
-    time_updated: u64,
+    time_updated: Option<u64>,
 }
 
 impl From<PublishedFileChildren> for ModManifestMod {
     fn from(val: PublishedFileChildren) -> Self {
-        ModManifestMod { publishedfileid: val.publishedfileid, version: val.time_updated }
+        ModManifestMod { publishedfileid: val.publishedfileid, version: val.time_updated.unwrap_or(0) }
     }
 }
 
@@ -105,16 +105,24 @@ async fn collect_mods_from_collections(client: &reqwest::Client, collections: &m
     const COLLECTION_URL: &str = "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/";
     let mut children: Vec<CollectionChildren> = vec![];
 
+    debug!("Getting collection information");
+
     while !collections.is_empty() {
         let mut params = FxHashMap::default();
         params.insert(String::from("collectioncount"), collections.len().to_string());
         for (i, c) in collections.drain(..).enumerate() {
+            debug!("Getting mods from collection: {c}");
             let idx = format!("publishedfileids[{}]", i);
             params.insert(idx, c.clone());
         }
         let resp = client.post(COLLECTION_URL).form(&params).send().await?;
         children.extend({
-            let response: CollectionDetailsRequest = resp.json().await?;
+            let raw_json: serde_json::Value = resp.json().await?;
+            let response = match serde_json::from_value::<CollectionDetailsRequest>(raw_json.clone()) {
+                Ok(r) => r,
+                Err(e) => { error!("Failed to parse collection details as structured json! response body: {:?}", raw_json); return Err(e.into()); }
+            };
+            debug!("Server responded with: {:?}", response);
             // filetype == 0 is mod, filetype == 2 is linked collection
             let (children, linked_collections): (Vec<CollectionChildren>, Vec<CollectionChildren>) = response.response.collectiondetails.into_iter().flat_map(|cd| cd.children).partition(|c| c.filetype == 0);
             collections.extend(linked_collections.into_iter().map(CollectionChildren::into_file_id));
@@ -127,13 +135,21 @@ async fn collect_mods_from_collections(client: &reqwest::Client, collections: &m
 async fn get_versioned_mods(client: &reqwest::Client, mods: &[CollectionChildren]) -> Result<Vec<ModManifestMod>> {
     const PUBLISHED_FILE_URL: &str = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/";
     let mut params = FxHashMap::default();
+
+    debug!("Getting mod information");
+
     params.insert(String::from("itemcount"), mods.len().to_string());
     for (i, m) in mods.iter().enumerate() {
+        debug!("Getting information for mod: {}", m.publishedfileid);
         let idx = format!("publishedfileids[{}]", i);
         params.insert(idx, m.publishedfileid.clone());
     }
     let resp = client.post(PUBLISHED_FILE_URL).form(&params).send().await?;
-    let response: PublishedFileRequest = resp.json().await?;
+    let raw_json: serde_json::Value = resp.json().await?;
+    let response: PublishedFileRequest = match serde_json::from_value(raw_json.clone()) {
+        Ok(r) => r,
+        Err(e) => { error!("Failed to parse mod details as structured json! response body:\n{:#?}", raw_json); return Err(e.into()); }
+    };
     let children: Vec<ModManifestMod> = response.response.publishedfiledetails.into_iter().map(PublishedFileChildren::into).collect();
     Ok(children)
 }
@@ -151,8 +167,12 @@ async fn download_mods_from_workshop(force_install_dir: &Path, mods_to_install: 
     info!("Count steamcmd parameters: {:?}", &steamcmd_params);
     
     // Reset the directory to prevent previous downloads
-    tokio::fs::remove_dir_all(force_install_dir).await?;
-    tokio::fs::create_dir(force_install_dir).await?;
+    // if force_install_dir.exists() {
+    //     tokio::fs::remove_dir_all(force_install_dir).await?;
+    // }
+    
+    // TODO: Move downloads to a .cache directory so it can be deleted on-demand by user
+    tokio::fs::create_dir_all(force_install_dir).await?;
 
     let (file_io, output_file) = if let Some(log_file) = log_file {
         unsafe {
@@ -199,7 +219,7 @@ async fn download_collection_internal(instance: Instance, force_install_dir: &Pa
     let mods_in_manifest: Vec<ModManifestMod> = match read_manifest(&mods_folder).await {
         Ok(v) => v.mods,
         Err(e) => {
-            error!("Missing manifest json: {e}");
+            warn!("Missing manifest json, this is not a problem if downloading mods for this instance for the first time: {e}");
             vec![]
         }
     };

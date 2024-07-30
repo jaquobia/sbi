@@ -3,8 +3,10 @@ use app::AppSBI;
 use cli_args::CliArgs;
 use directories::ProjectDirs;
 use flexi_logger::FileSpec;
-use interprocess::local_socket::LocalSocketStream;
+use interprocess::local_socket::{traits::tokio::{Listener, Stream}, GenericFilePath, GenericNamespaced, ListenerOptions, Name, NameType};
+use json::SBILaunchMessageJson;
 use log::{info, warn};
+use tokio::{io::{AsyncBufReadExt, AsyncWriteExt}, sync::mpsc::UnboundedSender};
 
 mod json;
 mod instance;
@@ -16,14 +18,89 @@ mod game_launcher;
 mod mod_manifest;
 mod core;
 
-static ORGANIZATION_QUALIFIER: &str = "com";
+static ORGANIZATION_QUALIFIER: &str = "";
 static ORGANIZATION_NAME: &str = "";
 static APPLICATION_NAME: &str = "sbi";
+
 static INSTANCE_JSON_NAME: &str = "instance.json";
 static SBI_CONFIG_JSON_NAME: &str = "config.json";
+
 static STARBOUND_STEAM_ID: &str = "211820";
 static STARBOUND_BOOT_CONFIG_NAME: &str = "sbinit.config";
+
 static LOCAL_PIPE_NAME: &str = "@SBI_PIPE_NAME";
+static LOCAL_PIPE_FS_NAME: &str = "/tmp/@SBI_PIPE_NAME";
+
+fn get_pipe_name() -> Result<Name<'static>> {
+    let name = if GenericNamespaced::is_supported() {
+        interprocess::local_socket::ToNsName::to_ns_name::<GenericNamespaced>(LOCAL_PIPE_NAME)?
+	} else {
+        interprocess::local_socket::ToFsName::to_fs_name::<GenericFilePath>(LOCAL_PIPE_FS_NAME)?
+	};
+    Ok(name)
+}
+
+pub async fn spawn_sbi_service() -> Result<UnboundedSender<SBILaunchMessageJson>> {
+    let (sender, reciver) = tokio::sync::mpsc::unbounded_channel::<SBILaunchMessageJson>();
+
+    let name = get_pipe_name()?;
+    let listener = match interprocess::local_socket::tokio::Listener::from_options(ListenerOptions::new().name(name)) {
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            return Err(anyhow!("SBI pipe {:?} is already running somewhere...", get_pipe_name()))
+        }
+        Err(e) => {
+            return Err(e.into());
+        }
+        Ok(x) => x,
+    };
+    tokio::spawn(async {
+
+        // "async block doesn't return Result type" so wrapping failable code in a function
+        async fn accept_client(listener: &interprocess::local_socket::tokio::Listener, reciver: &mut tokio::sync::mpsc::UnboundedReceiver<SBILaunchMessageJson>) -> Result<()> {
+            // SBI slave has requested launch information
+            let conn = listener.accept().await?;
+            let (_, mut writer) = conn.split();
+
+            match reciver.try_recv() {
+                // We have launch information
+                Ok(x) => {
+                    let bytes = serde_json::to_vec::<SBILaunchMessageJson>(&x)?;
+                    writer.write_all(&bytes).await?;
+                }
+                // We did not request a launch
+                Err(_) => {
+                    return Ok(());
+                }
+            }
+            Ok(())
+        } // end fn
+
+        let mut reciver = reciver;
+        let listener = listener;
+
+        loop {
+            match accept_client(&listener, &mut reciver).await {
+                Ok(()) | Err(_) => {},
+            };
+        }
+    });
+    Ok(sender)
+}
+
+async fn connect_to_existing_sbi_service(local_socket: interprocess::local_socket::tokio::Stream) -> Result<()> {
+    info!("Launching starbound through steam!");
+
+    let (recv, _) = local_socket.split();
+    let mut recv = tokio::io::BufReader::new(recv);
+    let mut buffer = String::with_capacity(2048);
+    recv.read_line(&mut buffer).await?;
+    let launch_message: json::SBILaunchMessageJson = serde_json::from_str(&buffer)?;
+
+    let executable_path = launch_message.exececutable_path;
+    let maybe_extra_ld_path = launch_message.ld_library_path.as_deref();
+    let instance_path = launch_message.instance_path.unwrap_or_else(|| std::env::current_dir().expect("Current working directory cannot be read from"));
+    game_launcher::launch_instance_cli(&executable_path, &instance_path, maybe_extra_ld_path)
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -36,21 +113,13 @@ async fn main() -> Result<()> {
             .basename("sbi")
             .suppress_timestamp()
         )
-        .rotate(flexi_logger::Criterion::Age(flexi_logger::Age::Second), flexi_logger::Naming::Numbers, flexi_logger::Cleanup::KeepLogFiles(3))
         .start()?;
     if cli_args.query {
         // flexi_logger::Logger::try_with_env_or_str("info")?.start()?;
-        match LocalSocketStream::connect(LOCAL_PIPE_NAME) {
+        let name = get_pipe_name()?;
+        match interprocess::local_socket::tokio::Stream::connect(name).await {
             Ok(local_socket) => {
-
-                info!("Launching starbound through steam!");
-                let launch_message: json::SBILaunchMessageJson = serde_json::from_reader(local_socket)?;
-
-                let executable_path = launch_message.exececutable_path;
-                let maybe_extra_ld_path = launch_message.ld_library_path.as_deref();
-                let instance_path = launch_message.instance_path.unwrap_or_else(|| std::env::current_dir().expect("Current working directory cannot be read from"));
-                game_launcher::launch_instance_cli(&executable_path, &instance_path, maybe_extra_ld_path)?;
-
+                connect_to_existing_sbi_service(local_socket).await?;
             },
             Err(_) => {
                 warn!("Could not connect to sbi client!");
@@ -58,6 +127,7 @@ async fn main() -> Result<()> {
                     info!("Attempting to launch game through default command: {:?}", default_command);
                     game_launcher::launch_default(default_command)?;
                 }
+                // Here, sbi closes quietly due to no fall-backs
             }
 
         }

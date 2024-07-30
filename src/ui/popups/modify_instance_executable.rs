@@ -1,5 +1,5 @@
 use crossterm::event::{Event, KeyCode, KeyEventKind};
-use ratatui::{layout::Direction, style::{Color, Style}, text::Text, widgets::{Block, BorderType, Borders, Paragraph, Widget}};
+use ratatui::{layout::{Direction, Margin}, style::{Color, Style}, text::Text, widgets::{Block, BorderType, Borders, Paragraph, Widget}};
 use tui_textarea::TextArea;
 
 use crate::{app::AppMessage, instance::{Instance, ModifyInstance}, ui::{self, component::UIComponent, widgets::spinner::Spinner}};
@@ -113,7 +113,7 @@ impl UIComponent<AppMessage> for ModifyInstancePopup {
             .border_type(BorderType::Rounded)
             .title("Configure Instance");
         border.render(area, buffer);
-        let area = area.inner(&ratatui::layout::Margin { horizontal:1, vertical:1 });
+        let area = area.inner(Margin { horizontal:1, vertical:1 });
         let [_, spinner_area, _, collection_area, confirmation_button_area] = ui::layout(area, Direction::Vertical, [C::Max(1), C::Length(1), C::Max(1), C::Length(3), C::Length(1)]);
         {
             let exec_label_string = " Exec:";

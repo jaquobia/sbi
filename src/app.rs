@@ -2,10 +2,10 @@ use std::{
     cell::RefCell, fs, io::{self, stdout}, ops::Rem, path::{Path, PathBuf}
 };
 
-use crate::{game_launcher, json::{InstanceDataJson, SBIConfig, SBILaunchMessageJson}};
+use crate::{game_launcher, json::{InstanceDataJson, SBIConfig, SBILaunchMessageJson}, spawn_sbi_service};
 use crate::{
     instance::{Instance, ModifyInstance},
-    workshop_downloader, LOCAL_PIPE_NAME, SBI_CONFIG_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME,
+    workshop_downloader, SBI_CONFIG_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME,
 };
 use anyhow::{anyhow, Result};
 use crossterm::{
@@ -13,7 +13,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use itertools::{Either, Itertools};
+use itertools::Either;
 use log::error;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
@@ -75,6 +75,7 @@ pub struct AppSBI {
     instance_index: usize,
     proj_dirs: ProjectDirs,
     sender: UnboundedSender<SBILaunchMessageJson>,
+    running_task: Option<tokio::task::JoinHandle<()>>,
     config: SBIConfig,
     should_quit: bool,
     debug: String,
@@ -83,50 +84,7 @@ pub struct AppSBI {
 impl AppSBI {
     /// Run app and enter alternate TUI screen until app is finished
     pub async fn run(proj_dirs: ProjectDirs) -> Result<()> {
-        let (sender, reciver) = tokio::sync::mpsc::unbounded_channel::<SBILaunchMessageJson>();
-
-        let listener = match interprocess::local_socket::tokio::LocalSocketListener::bind(
-            LOCAL_PIPE_NAME,
-        ) {
-            Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
-                // eprintln!("Error: could not start server because the socket file is occupied. Please check if {} is in use by another process and try again.", LOCAL_PIPE_NAME);
-                // let var_name: Result<()> = Err(e.into());
-                // return var_name;
-                return Err(anyhow!("SBI is already running somewhere..."))
-            }
-            Err(e) => {
-                return Err(e.into());
-            }
-            Ok(x) => x,
-        };
-        tokio::spawn(async {
-
-            // "async block doesn't return Result type" so wrapping failable code in a function
-            async fn accept_client(listener: &interprocess::local_socket::tokio::LocalSocketListener, reciver: &mut tokio::sync::mpsc::UnboundedReceiver<SBILaunchMessageJson>) -> Result<()> {
-                let conn = listener.accept().await?;
-                let (_, mut writer) = conn.into_split();
-                match reciver.try_recv() {
-                    Ok(x) => {
-                       let bytes = serde_json::to_vec::<SBILaunchMessageJson>(&x)?;
-                       futures::AsyncWriteExt::write_all(&mut writer, &bytes).await?;
-                    }
-                    Err(_) => {
-                        return Ok(());
-                    }
-                }
-                Ok(())
-            }
-
-            let mut reciver = reciver;
-            let listener = listener;
-
-            loop {
-                match accept_client(&listener, &mut reciver).await {
-                    Ok(()) | Err(_) => {},
-                };
-            }
-        });
-
+        let sender = spawn_sbi_service().await?;
         let mut app = AppSBI::new(proj_dirs, sender);
         app.update_instances()?;
 
@@ -175,6 +133,7 @@ impl AppSBI {
             instance_index: 0,
             proj_dirs: dirs,
             sender,
+            running_task: None,
             config,
             should_quit: false,
             debug: String::new(),
@@ -290,6 +249,10 @@ impl AppSBI {
         }
     }
 
+    pub fn is_task_running(&self) -> bool {
+        self.running_task.as_ref().is_some_and(|task| !task.is_finished())
+    }
+
     pub fn open_popup(&mut self, popup: BoxedConsumablePopup<AppMessage>) {
         let _ = self.popup.insert(RefCell::new(popup));
     }
@@ -304,7 +267,7 @@ impl AppSBI {
     }
     pub fn delete_current_instance(&mut self) -> Result<()> {
         if let Ok(instance) = self.get_instance_current() {
-            crate::core::delete_instance(instance);
+            crate::core::delete_instance(instance)?;
             self.update_instances()?;
             self.scroll_instances_up();
         }
@@ -383,16 +346,16 @@ impl AppSBI {
         if let Ok(instance) = self.get_instance_current() {
             let force_install_dir = self.proj_dirs.data_dir().join("downloads");
             let instance_clone = instance.clone();
-            tokio::spawn(async move {
+            self.running_task = Some(tokio::spawn(async move {
                 let r = workshop_downloader::download_collection(
                     instance_clone,
                     force_install_dir,
                 )
                 .await;
                 if let Result::Err(e) = r {
-                    error!("{e}");
+                    error!("Problem occured while downloading collection: {e}");
                 }
-            });
+            }));
         }
         Ok(())
     }
@@ -530,6 +493,10 @@ fn handle_event_home(event: Event, app: &AppSBI) -> Option<AppMessage> {
 }
 
 fn handle_events(app: &mut AppSBI) -> Result<Option<AppMessage>> {
+    // log::info!("Task running: {}", app.is_task_running());
+    if app.is_task_running() {
+        return Ok(None);
+    }
     if event::poll(std::time::Duration::from_millis(50))? {
         let event = event::read()?;
         // Unlike rendering, popups do not share event handling
@@ -623,7 +590,7 @@ fn draw_home(area: Rect, buffer: &mut Buffer, app: &AppSBI) {
         let text = Text::from(lines);
 
         let [area_instance_list, area_line_separator, area_instance_info, _] = ui::layout(
-            area.inner(&Margin {
+            area.inner(Margin {
                 vertical: 1,
                 horizontal: 1,
             }),
