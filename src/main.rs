@@ -31,6 +31,7 @@ static STARBOUND_BOOT_CONFIG_NAME: &str = "sbinit.config";
 static LOCAL_PIPE_NAME: &str = "@SBI_PIPE_NAME";
 static LOCAL_PIPE_FS_NAME: &str = "/tmp/@SBI_PIPE_NAME";
 
+// Returns a platform accepted pipe name, preferring namespaced names if available
 fn get_pipe_name() -> Result<Name<'static>> {
     let name = if GenericNamespaced::is_supported() {
         interprocess::local_socket::ToNsName::to_ns_name::<GenericNamespaced>(LOCAL_PIPE_NAME)?
@@ -40,6 +41,13 @@ fn get_pipe_name() -> Result<Name<'static>> {
     Ok(name)
 }
 
+/// Run the sbi service asyncronously which can be connected to with `connect_to_existing_sbi_service`.
+/// This service will create a local pipe that will transmit a `json::SBILaunchMessage` if one has
+/// been queued.
+/// This service expects clients to connect from a steam launch request or that clients have a
+/// fallback if the steam service was launched manually
+///
+/// This function will return an error if the pipe is already in use or cannot be created for some other generic IO reason.
 pub async fn spawn_sbi_service() -> Result<UnboundedSender<SBILaunchMessageJson>> {
     let (sender, reciver) = tokio::sync::mpsc::unbounded_channel::<SBILaunchMessageJson>();
 
@@ -87,6 +95,12 @@ pub async fn spawn_sbi_service() -> Result<UnboundedSender<SBILaunchMessageJson>
     Ok(sender)
 }
 
+/// Get the launch message from an SBI service and launch starbound.
+///
+/// # Errors
+///
+/// This function will return an error if the message cannot be parsed, the cwd does not have
+/// read permissions, or the game launch fails for some reason.
 async fn connect_to_existing_sbi_service(local_socket: interprocess::local_socket::tokio::Stream) -> Result<()> {
     info!("Launching starbound through steam!");
 

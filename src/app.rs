@@ -16,6 +16,7 @@ use crossterm::{
 use itertools::Either;
 use log::error;
 use ratatui::{prelude::*, widgets::*};
+use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc::UnboundedSender;
 
 use directories::ProjectDirs;
@@ -79,6 +80,7 @@ pub struct AppSBI {
     config: SBIConfig,
     should_quit: bool,
     debug: String,
+    throbber_state: RefCell<ThrobberState>,
 }
 
 impl AppSBI {
@@ -137,6 +139,7 @@ impl AppSBI {
             config,
             should_quit: false,
             debug: String::new(),
+            throbber_state: RefCell::new(ThrobberState::default()),
         }
     }
     /// Write the config struct to the json file
@@ -494,6 +497,7 @@ fn handle_event_home(event: Event, app: &AppSBI) -> Option<AppMessage> {
 
 fn handle_events(app: &mut AppSBI) -> Result<Option<AppMessage>> {
     // log::info!("Task running: {}", app.is_task_running());
+    app.throbber_state.get_mut().calc_next();
     if app.is_task_running() {
         return Ok(None);
     }
@@ -571,7 +575,7 @@ fn draw_home(area: Rect, buffer: &mut Buffer, app: &AppSBI) {
         };
         let executable = match current_instance.executable() {
             Some(executable) => {
-                format!("{}", executable)
+                executable.to_string()
             }
             None => {
                 format!("Default({})", app.config.default_executable)
@@ -589,7 +593,7 @@ fn draw_home(area: Rect, buffer: &mut Buffer, app: &AppSBI) {
         let lines_count = lines.len();
         let text = Text::from(lines);
 
-        let [area_instance_list, area_line_separator, area_instance_info, _] = ui::layout(
+        let [area_instance_list, area_line_separator, area_instance_info, area_line_separator2, area_bg_task_indicator, _] = ui::layout(
             area.inner(Margin {
                 vertical: 1,
                 horizontal: 1,
@@ -599,6 +603,8 @@ fn draw_home(area: Rect, buffer: &mut Buffer, app: &AppSBI) {
                 C::Min(0),
                 C::Length(1),
                 C::Length(lines_count as u16),
+                C::Length(1),
+                C::Length(1),
                 C::Length(0),
             ],
         );
@@ -614,9 +620,17 @@ fn draw_home(area: Rect, buffer: &mut Buffer, app: &AppSBI) {
             .borders(Borders::TOP)
             .style(home_border_style)
             .render(area_line_separator, buffer);
+        Block::new()
+            .borders(Borders::TOP)
+            .style(home_border_style)
+            .render(area_line_separator2, buffer);
         Paragraph::new(text)
             .wrap(Wrap { trim: false })
             .render(area_instance_info, buffer);
+        if app.is_task_running() {
+            let throbber = throbber_widgets_tui::Throbber::default().label("Working.. Input will be disabled until work is done.").throbber_set(throbber_widgets_tui::ASCII);
+            StatefulWidget::render(throbber, area_bg_task_indicator, buffer, &mut app.throbber_state.borrow_mut());
+        }
     }
 }
 
@@ -625,6 +639,7 @@ fn ui(frame: &mut Frame, app: &AppSBI) {
     let buffer = frame.buffer_mut();
 
     use Constraint as C;
+    
     let [area_instances, area_debug, area_keybinds] = ui::layout(
         area,
         Direction::Vertical,
@@ -632,7 +647,7 @@ fn ui(frame: &mut Frame, app: &AppSBI) {
     );
     draw_home(area_instances, buffer, app);
 
-    Paragraph::new(Line::from(app.debug.to_owned())).render(area_debug, buffer);
+    Paragraph::new(Line::from(app.debug.to_owned())).bg(Color::Indexed(234)).render(area_debug, buffer);
 
     // Draw Status and Keybinds
     let keys = [
