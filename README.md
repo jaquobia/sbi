@@ -4,7 +4,7 @@ Sbi is a linux-first TUI utility for starbound that allows you to combine a set 
 # Warning
 Sbi is built with unix paths and environments in mind and therefore is not guaranteed to work on Windows now or in the future.  
 Sbi is in a very experimental state, so stability is not guaranteed and the folder, path, or json structures can change on any commit.  
-Many features are simple and non-communicative, so actions such as updating a collection will appear to do nothing but are silently working in the background.
+Many features are simple and non-communicative, so actions such as updating a collection will appear to do nothing but are silently working in the background. (Edit: updating mods now blocks input and shows a spinner!)
 
 # Installing
 TODO - binary installation  

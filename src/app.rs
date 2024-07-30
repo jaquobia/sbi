@@ -79,7 +79,7 @@ pub struct AppSBI {
     running_task: Option<tokio::task::JoinHandle<()>>,
     config: SBIConfig,
     should_quit: bool,
-    debug: String,
+    // Move this into some render struct
     throbber_state: RefCell<ThrobberState>,
 }
 
@@ -138,7 +138,6 @@ impl AppSBI {
             running_task: None,
             config,
             should_quit: false,
-            debug: String::new(),
             throbber_state: RefCell::new(ThrobberState::default()),
         }
     }
@@ -496,8 +495,11 @@ fn handle_event_home(event: Event, app: &AppSBI) -> Option<AppMessage> {
 }
 
 fn handle_events(app: &mut AppSBI) -> Result<Option<AppMessage>> {
-    // log::info!("Task running: {}", app.is_task_running());
+
+    // Move into a timed update function for
+    // nicer spinning
     app.throbber_state.get_mut().calc_next();
+
     if app.is_task_running() {
         return Ok(None);
     }
@@ -521,7 +523,6 @@ fn handle_events(app: &mut AppSBI) -> Result<Option<AppMessage>> {
     Ok(None)
 }
 
-// fn handle_message(message: AppMessage, app: &mut AppSBI)
 fn draw_keys(area: Rect, buffer: &mut Buffer, keys: &[(&str, &str)]) {
     let keybind_key_style = Style::new();
     let keybind_desc_style = Style::new();
@@ -552,7 +553,7 @@ fn draw_keys(area: Rect, buffer: &mut Buffer, keys: &[(&str, &str)]) {
 fn draw_home(area: Rect, buffer: &mut Buffer, app: &AppSBI) {
     use Constraint as C;
     let title_style = Style::new();
-    let highlighted_instance_style = Style::new().bg(Color::White).fg(Color::Black);
+    let highlighted_instance_style = Style::new().bg(if !app.is_task_running() { Color::White } else { Color::Indexed(240) }).fg(Color::Black);
     let home_border_style = Style::new().fg(Color::Green);
     let instance_list_style = Style::new().fg(Color::White);
     let instance_info_style = Style::new().fg(Color::White);
@@ -640,14 +641,12 @@ fn ui(frame: &mut Frame, app: &AppSBI) {
 
     use Constraint as C;
     
-    let [area_instances, area_debug, area_keybinds] = ui::layout(
+    let [area_instances, area_keybinds] = ui::layout(
         area,
         Direction::Vertical,
-        [C::Min(0), C::Length(1), C::Length(1)],
+        [C::Min(0), C::Length(1)],
     );
     draw_home(area_instances, buffer, app);
-
-    Paragraph::new(Line::from(app.debug.to_owned())).bg(Color::Indexed(234)).render(area_debug, buffer);
 
     // Draw Status and Keybinds
     let keys = [

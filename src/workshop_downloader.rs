@@ -198,6 +198,9 @@ pub async fn download_collection<P: AsRef<Path>>(instance: Instance, force_insta
     download_collection_internal(instance, force_install_dir.as_ref()).await
 }
 
+// TODO: download mods individually and test their outputs for success / failure
+// Mods tends to time-out and can be fixed just by attempting to download them again for a numbered
+// amount of attempts
 async fn download_collection_internal(instance: Instance, force_install_dir: &Path) -> Result<()> {
 
     let client = reqwest::Client::new();
