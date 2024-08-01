@@ -10,7 +10,7 @@ use tokio::{io::{AsyncBufReadExt, AsyncWriteExt}, sync::mpsc::UnboundedSender};
 
 mod json;
 mod instance;
-mod ui;
+mod tui;
 mod cli_args;
 mod app;
 mod workshop_downloader;
@@ -63,33 +63,24 @@ pub async fn spawn_sbi_service() -> Result<UnboundedSender<SBILaunchMessageJson>
     };
     tokio::spawn(async {
 
+        // Capture environment
+        let mut reciver = reciver;
+        let listener = listener;
+
         // "async block doesn't return Result type" so wrapping failable code in a function
         async fn accept_client(listener: &interprocess::local_socket::tokio::Listener, reciver: &mut tokio::sync::mpsc::UnboundedReceiver<SBILaunchMessageJson>) -> Result<()> {
             // SBI slave has requested launch information
-            let conn = listener.accept().await?;
-            let (_, mut writer) = conn.split();
+            let (_, mut writer) = listener.accept().await?.split();
 
-            match reciver.try_recv() {
-                // We have launch information
-                Ok(x) => {
-                    let bytes = serde_json::to_vec::<SBILaunchMessageJson>(&x)?;
-                    writer.write_all(&bytes).await?;
-                }
-                // We did not request a launch
-                Err(_) => {
-                    return Ok(());
-                }
+            if let Ok(x) = reciver.try_recv() {
+                let bytes = serde_json::to_vec::<SBILaunchMessageJson>(&x)?;
+                writer.write_all(&bytes).await?;
             }
             Ok(())
         } // end fn
 
-        let mut reciver = reciver;
-        let listener = listener;
-
         loop {
-            match accept_client(&listener, &mut reciver).await {
-                Ok(()) | Err(_) => {},
-            };
+            let _ = accept_client(&listener, &mut reciver).await;
         }
     });
     Ok(sender)

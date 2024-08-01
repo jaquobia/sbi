@@ -1,7 +1,7 @@
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{style::{Color, Style}, text::{Line, Text}, widgets::{Block, Borders, Clear, Paragraph, Widget}};
 
-use crate::{app::AppMessage, ui::{self, component::UIComponent}};
+use crate::{app::AppMessage, tui::ui::{self, component::UIComponent}};
 
 use super::ConsumablePopup;
 

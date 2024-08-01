@@ -2,7 +2,7 @@ use crossterm::event::{self, Event, KeyCode};
 use ratatui::{buffer::Buffer, layout::{Direction, Rect}, style::{Color, Style}, widgets::{Block, Borders, Clear, Paragraph, Widget}};
 use tui_textarea::TextArea;
 
-use crate::{app::AppMessage, json::InstanceDataJson, ui::{self, component::UIComponent, widgets::spinner::Spinner}};
+use crate::{app::AppMessage, json::InstanceDataJson, tui::ui::{self, component::UIComponent, widgets::spinner::Spinner}};
 
 use super::ConsumablePopup;
 

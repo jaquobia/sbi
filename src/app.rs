@@ -20,13 +20,12 @@ use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc::UnboundedSender;
 
 use directories::ProjectDirs;
-use ui::popups::{
+use crate::{tui::ui::{self, popups::{
     confirmation::ConfirmationPopup, list_select::ListSelectPopup,
     modify_instance_executable::ModifyInstancePopup, new_instance::NewInstancePopup,
     rename_instance::RenamePopup, BoxedConsumablePopup, ConsumablePopup,
-};
+}}, INSTANCE_JSON_NAME};
 
-use crate::{ui, INSTANCE_JSON_NAME};
 /// Turns instance.json into Instance struct
 fn parse_instance_paths_to_json(instance_json_paths: &[PathBuf]) -> Vec<Instance> {
     instance_json_paths

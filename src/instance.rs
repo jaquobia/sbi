@@ -49,10 +49,6 @@ impl Instance {
         self.json.collection_id.clone()
     }
 
-    // pub fn path(&self) -> &Path {
-    //     &self.config_path
-    // }
-
     pub fn folder_path(&self) -> &Path {
         &self.folder_path
     }
