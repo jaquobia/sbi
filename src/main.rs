@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use anyhow::{anyhow, Result};
 use app::AppSBI;
 use cli_args::CliArgs;
@@ -30,6 +32,10 @@ static STARBOUND_BOOT_CONFIG_NAME: &str = "sbinit.config";
 
 static LOCAL_PIPE_NAME: &str = "@SBI_PIPE_NAME";
 static LOCAL_PIPE_FS_NAME: &str = "/tmp/@SBI_PIPE_NAME";
+
+// static DIRECTORIES : LazyLock<ProjectDirs> = LazyLock::new(|| {
+//     ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME).expect("Could not read project directories")
+// });
 
 // Returns a platform accepted pipe name, preferring namespaced names if available
 fn get_pipe_name() -> Result<Name<'static>> {
@@ -109,7 +115,9 @@ async fn connect_to_existing_sbi_service(local_socket: interprocess::local_socke
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // TODO: This does not change after initialization, maybe replace storage with static reference?
     let proj_dirs = ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME).ok_or(anyhow!("Can't find home directory"))?;
+
     let cli_args: CliArgs = clap::Parser::try_parse()?;
     let _log_handle = flexi_logger::Logger::try_with_env_or_str("info")?
         .log_to_file(
@@ -119,6 +127,7 @@ async fn main() -> Result<()> {
             .suppress_timestamp()
         )
         .start()?;
+
     if cli_args.query {
         // flexi_logger::Logger::try_with_env_or_str("info")?.start()?;
         let name = get_pipe_name()?;
@@ -138,5 +147,6 @@ async fn main() -> Result<()> {
         }
         return Ok(());
     }
+
     AppSBI::run(proj_dirs).await
 }
