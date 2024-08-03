@@ -3,7 +3,34 @@ use std::{fs, path::{Path, PathBuf}};
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 
-use crate::{instance::{Instance, ModifyInstance}, json::{InstanceDataJson, SBIConfig}, INSTANCE_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME};
+use crate::{instance::{Instance, ModifyInstance}, json::{InstanceDataJson, SBIConfig}, INSTANCE_JSON_NAME, SBI_CONFIG_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME};
+
+/// Turns instance.json into Instance struct
+pub fn parse_instance_paths_to_json(instance_json_paths: &[PathBuf]) -> Vec<Instance> {
+    instance_json_paths
+        .iter()
+        .map(|ins_path| fs::read_to_string(ins_path).map(|str| (str, ins_path.clone())))
+        .filter_map(Result::ok)
+        .map(|(data, path)| {
+            serde_json::from_str(&data).map(|data| Instance::from_json(data, &path))
+        })
+        .filter_map(Result::ok)
+        .filter_map(Result::ok)
+        .collect()
+}
+
+/// Returns an owned iterator of paths to the instance.json of each instance
+pub fn get_instance_json_paths(instances_dir: &std::path::Path) -> Result<Vec<PathBuf>> {
+    let instances = instances_dir
+        .read_dir()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir() || path.is_symlink())
+        .map(|path| path.join(INSTANCE_JSON_NAME))
+        .filter(|path| path.is_file())
+        .collect();
+    Ok(instances)
+}
 
 fn write_instance(instance: &Instance) -> Result<()> {
     let instance_path = instance.folder_path();
@@ -13,6 +40,28 @@ fn write_instance(instance: &Instance) -> Result<()> {
     Ok(())
 }
 
+/// Write the config struct to the json file
+pub fn write_config(data_dir: &Path, config: &SBIConfig) -> Result<()> {
+    let contents = serde_json::to_string_pretty(config)?;
+    fs::write(data_dir.join(SBI_CONFIG_JSON_NAME), contents)?;
+    Ok(())
+}
+/// Read the config json file at data_dir and return the parsed SBIConfig struct
+pub fn read_config(data_dir: &Path) -> Result<SBIConfig> {
+    let config_json_string = fs::read_to_string(data_dir.join(SBI_CONFIG_JSON_NAME))?;
+    let config: SBIConfig = serde_json::from_str(&config_json_string)?;
+    Ok(config)
+}
+/// Get config json from data directory or return
+/// default values if config is missing
+pub fn load_or_generate_config(data_dir: &Path) -> SBIConfig {
+    read_config(data_dir).unwrap_or_else(|_| {
+        let config = SBIConfig::default();
+        // TODO: we probably should care
+        let _we_dont_care = write_config(data_dir, &config);
+        config
+    })
+}
 
 /// Write or replace the sbinit.config of the starbound instance.
 ///

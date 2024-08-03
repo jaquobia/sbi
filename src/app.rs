@@ -1,55 +1,34 @@
 use std::{
-    cell::RefCell, fs, io::stdout, ops::Rem, path::{Path, PathBuf}, time::{Duration, Instant}
+    cell::RefCell,
+    fs,
+    io::stdout,
+    ops::Rem,
+    path::PathBuf,
+    time::{Duration, Instant},
 };
 
-use crate::{game_launcher, json::{InstanceDataJson, SBIConfig, SBILaunchMessageJson}, spawn_sbi_service, tui};
 use crate::{
+    game_launcher,
+    json::{InstanceDataJson, SBIConfig, SBILaunchMessageJson},
+    spawn_sbi_service, tui,
     instance::{Instance, ModifyInstance},
-    workshop_downloader, SBI_CONFIG_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME,
+    workshop_downloader, STARBOUND_BOOT_CONFIG_NAME,
 };
 use anyhow::{anyhow, Result};
-use crossterm::
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers}
-;
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use log::error;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 
-use directories::ProjectDirs;
-use crate::{
+use crate::
     tui::ui::popups::{
-    confirmation::ConfirmationPopup, list_select::ListSelectPopup,
-    modify_instance_executable::ModifyInstancePopup, new_instance::NewInstancePopup,
-    rename_instance::RenamePopup, BoxedConsumablePopup, ConsumablePopup,
-}, INSTANCE_JSON_NAME};
+        confirmation::ConfirmationPopup, list_select::ListSelectPopup,
+        modify_instance_executable::ModifyInstancePopup, new_instance::NewInstancePopup,
+        rename_instance::RenamePopup, BoxedConsumablePopup, ConsumablePopup,
+    }
+;
+use directories::ProjectDirs;
 
-
-/// Turns instance.json into Instance struct
-fn parse_instance_paths_to_json(instance_json_paths: &[PathBuf]) -> Vec<Instance> {
-    instance_json_paths
-        .iter()
-        .map(|ins_path| fs::read_to_string(ins_path).map(|str| (str, ins_path.clone())))
-        .filter_map(Result::ok)
-        .map(|(data, path)| {
-            serde_json::from_str(&data).map(|data| Instance::from_json(data, &path))
-        })
-        .filter_map(Result::ok)
-        .filter_map(Result::ok)
-        .collect()
-}
-
-/// Returns an owned iterator of paths to the instance.json of each instance
-fn get_instance_json_paths(instances_dir: &std::path::Path) -> Result<Vec<PathBuf>> {
-    let instances = instances_dir
-        .read_dir()?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.is_dir() || path.is_symlink())
-        .map(|path| path.join(INSTANCE_JSON_NAME))
-        .filter(|path| path.is_file())
-        .collect();
-    Ok(instances)
-}
 
 pub enum AppMessage {
     Quit,
@@ -111,7 +90,7 @@ impl AppSBI {
 
     /// Create a new app from the project directory struct
     pub fn new(dirs: ProjectDirs, sender: UnboundedSender<SBILaunchMessageJson>) -> Self {
-        let config = Self::load_or_generate_config(dirs.data_dir());
+        let config = crate::core::load_or_generate_config(dirs.data_dir());
         Self {
             popup: None,
             instances: Vec::new(),
@@ -122,28 +101,6 @@ impl AppSBI {
             config,
             should_quit: false,
         }
-    }
-    /// Write the config struct to the json file
-    fn write_config(data_dir: &Path, config: &SBIConfig) -> Result<()> {
-        let contents = serde_json::to_string_pretty(config)?;
-        fs::write(data_dir.join(SBI_CONFIG_JSON_NAME), contents)?;
-        Ok(())
-    }
-    /// Read the config json file at data_dir and return the parsed SBIConfig struct
-    fn read_json_from_string(data_dir: &Path) -> Result<SBIConfig> {
-        let config_json_string = fs::read_to_string(data_dir.join(SBI_CONFIG_JSON_NAME))?;
-        let config: SBIConfig = serde_json::from_str(&config_json_string)?;
-        Ok(config)
-    }
-    /// Get config json from data directory or return
-    /// default values if config is missing
-    fn load_or_generate_config(data_dir: &Path) -> SBIConfig {
-        Self::read_json_from_string(data_dir).unwrap_or_else(|_| {
-            let config = SBIConfig::default();
-            // TODO: we probably should care
-            let _we_dont_care = Self::write_config(data_dir, &config);
-            config
-        })
     }
     /// Set the application to a quit state
     /// Cannot undo this action
@@ -170,13 +127,18 @@ impl AppSBI {
     /// TODO: Ensure instance index is valid after update (Possible: Make new update_index fn?)
     pub fn update_instances(&mut self) -> Result<()> {
         // The instance we want to find again
-        let current_instance_name = self.get_instance_current().ok().map(|i|i.name().to_string());
+        let current_instance_name = self
+            .get_instance_current()
+            .ok()
+            .map(|i| i.name().to_string());
         let instances_dir = self.instances_dir()?;
-        let mut instances = parse_instance_paths_to_json(&get_instance_json_paths(&instances_dir)?);
+        let mut instances = crate::core::parse_instance_paths_to_json(&crate::core::get_instance_json_paths(&instances_dir)?);
         instances.sort_by(|i1, i2| i1.name().cmp(i2.name()));
 
         self.set_instances(instances);
-        if let Some(index) = current_instance_name.and_then(|name| self.instances.iter().position(|i| name.eq(i.name()))) {
+        if let Some(index) = current_instance_name
+            .and_then(|name| self.instances.iter().position(|i| name.eq(i.name())))
+        {
             self.instance_index = index;
         }
         Ok(())
@@ -215,7 +177,7 @@ impl AppSBI {
     pub fn get_instances(&self) -> &[Instance] {
         &self.instances
     }
-    /// Scroll the instance index up (subtracting 1), or wrapping at 0
+    /// Scroll the instance index up (visually) by subtracting 1, or wrapping at 0
     pub fn scroll_instances_up(&mut self) {
         if self.instance_index == 0 {
             self.instance_index = self.instances.len().saturating_sub(1);
@@ -223,7 +185,7 @@ impl AppSBI {
             self.instance_index = self.instance_index.saturating_sub(1);
         }
     }
-    /// Scroll the instance index down (adding 1), or wrapping at the last element
+    /// Scroll the instance index down (visually) by adding 1, or wrapping at the last element
     pub fn scroll_instances_down(&mut self) {
         if !self.instances.is_empty() {
             self.instance_index = self
@@ -234,7 +196,9 @@ impl AppSBI {
     }
 
     pub fn is_task_running(&self) -> bool {
-        self.running_task.as_ref().is_some_and(|task| !task.is_finished())
+        self.running_task
+            .as_ref()
+            .is_some_and(|task| !task.is_finished())
     }
 
     pub fn open_popup(&mut self, popup: BoxedConsumablePopup<AppMessage>) {
@@ -291,9 +255,7 @@ impl AppSBI {
                 .as_ref()
                 .unwrap_or(&self.config.default_executable)
                 .to_owned();
-            let bootconfig = instance
-                .folder_path()
-                .join(STARBOUND_BOOT_CONFIG_NAME);
+            let bootconfig = instance.folder_path().join(STARBOUND_BOOT_CONFIG_NAME);
             (executable_name, bootconfig, instance.folder_path())
         };
         let (executable_path, sb_ld_path) = {
@@ -314,9 +276,12 @@ impl AppSBI {
                 .unwrap_or(exec_parent_path);
             (executable_path, sb_ld_path)
         };
-        let launch_message = SBILaunchMessageJson { exececutable_path: executable_path, instance_path: Some(instance_path.to_path_buf()), ld_library_path: Some(sb_ld_path) };
-        self.sender
-            .send(launch_message)?;
+        let launch_message = SBILaunchMessageJson {
+            exececutable_path: executable_path,
+            instance_path: Some(instance_path.to_path_buf()),
+            ld_library_path: Some(sb_ld_path),
+        };
+        self.sender.send(launch_message)?;
         game_launcher::launch_instance_steam(Some(&bootconfig))
     }
     pub fn modify_instance(&mut self, modification: ModifyInstance) -> Result<()> {
@@ -331,11 +296,8 @@ impl AppSBI {
             let force_install_dir = self.proj_dirs.data_dir().join("downloads");
             let instance_clone = instance.clone();
             self.running_task = Some(tokio::spawn(async move {
-                let r = workshop_downloader::download_collection(
-                    instance_clone,
-                    force_install_dir,
-                )
-                .await;
+                let r = workshop_downloader::download_collection(instance_clone, force_install_dir)
+                    .await;
                 if let Result::Err(e) = r {
                     error!("Problem occured while downloading collection: {e}");
                 }
@@ -422,8 +384,8 @@ fn handle_event_home(event: Event, app: &AppSBI) -> Option<AppMessage> {
                         (
                             "Configure",
                             AppMessage::OpenPopup(Box::new(ModifyInstancePopup::new(
-                                        app.get_instance_current().ok()?.clone(),
-                                        app.config.executables.keys().cloned().collect(),
+                                app.get_instance_current().ok()?.clone(),
+                                app.config.executables.keys().cloned().collect(),
                             ))),
                         ),
                         ("(Re)Install Collection", AppMessage::InstallCollection),
@@ -477,7 +439,6 @@ fn handle_event_home(event: Event, app: &AppSBI) -> Option<AppMessage> {
 }
 
 fn handle_events(app: &mut AppSBI) -> Result<Option<AppMessage>> {
-
     if app.is_task_running() {
         return Ok(None);
     }
@@ -500,4 +461,3 @@ fn handle_events(app: &mut AppSBI) -> Result<Option<AppMessage>> {
 
     Ok(None)
 }
-
