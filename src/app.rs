@@ -38,7 +38,7 @@ fn parse_instance_paths_to_json(instance_json_paths: &[PathBuf]) -> Vec<Instance
         .collect()
 }
 
-/// Returns an iterator of paths to the instance.json of each instance
+/// Returns an owned iterator of paths to the instance.json of each instance
 fn get_instance_json_paths(instances_dir: &std::path::Path) -> Result<Vec<PathBuf>> {
     let instances = instances_dir
         .read_dir()?
