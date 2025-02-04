@@ -1,4 +1,4 @@
-use crossterm::event::{self, Event, KeyCode};
+use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::{buffer::Buffer, layout::{Direction, Rect}, style::{Color, Style}, widgets::{Block, Borders, Clear, Paragraph, Widget}};
 use tui_textarea::TextArea;
 
@@ -124,10 +124,10 @@ impl UIComponent<AppMessage> for NewInstancePopup {
 
         // Draw shit
         border.render(area, buffer);
-        self.instance_name.widget().render(area_input_name_text, buffer);
+        self.instance_name.render(area_input_name_text, buffer);
         Paragraph::new("Executable:").centered().style(new_instance_text_style).render(area_spinner_executable_title, buffer);
-        self.exec_spinner.widget().render(area_spinner_executable, buffer);
-        self.collection_text.widget().render(area_collection_id, buffer);
+        self.exec_spinner.render(area_spinner_executable, buffer);
+        self.collection_text.render(area_collection_id, buffer);
         Paragraph::new("[Ok]").style(ok_button_style).right_aligned().render(area_ok_button, buffer);
     }
 

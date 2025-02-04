@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEventKind};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{layout::{Direction, Margin}, style::{Color, Style}, text::Text, widgets::{Block, BorderType, Borders, Paragraph, Widget}};
 use tui_textarea::TextArea;
 
@@ -76,7 +76,7 @@ impl ModifyInstancePopup {
 }
 
 impl UIComponent<AppMessage> for ModifyInstancePopup {
-    fn handle_event(&mut self, event: &crossterm::event::Event) -> Option<AppMessage> {
+    fn handle_event(&mut self, event: &Event) -> Option<AppMessage> {
         if let Event::Key(key) = event {
             if key.kind != KeyEventKind::Press { return None; }
             match key.code {
@@ -97,7 +97,7 @@ impl UIComponent<AppMessage> for ModifyInstancePopup {
                 _ => { 
                     match self.option_interactable {
                         0 => { self.exec_spinner.input(*key); },
-                        1 => { if self.collection_text.input(*key) { self.update(); } },
+                        1 => { let key = tui_textarea::Input::from(*key); if self.collection_text.input(key) { self.update(); } },
                         _ => {},
                     }
                 }
@@ -122,10 +122,10 @@ impl UIComponent<AppMessage> for ModifyInstancePopup {
             let [spinner_label_area, spinner_area] = ui::layout(spinner_area, Direction::Horizontal, 
                 [C::Length(exec_label_length), C::Fill(1)]);
             exec_label.render(spinner_label_area, buffer);
-            self.exec_spinner.widget().render(spinner_area, buffer);
+            self.exec_spinner.render(spinner_area, buffer);
         }
 
-        self.collection_text.widget().render(collection_area, buffer);
+        self.collection_text.render(collection_area, buffer);
         
         {
             let ok_button_style = Style::default().fg(if self.option_interactable == 2 { Color::LightYellow } else { Color::default() });

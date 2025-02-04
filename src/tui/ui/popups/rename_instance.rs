@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEventKind};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{style::Style, widgets::{Block, BorderType, Borders, Widget}};
 use tui_textarea::TextArea;
 
@@ -22,7 +22,7 @@ impl RenamePopup {
 }
 
 impl UIComponent<AppMessage> for RenamePopup {
-    fn handle_event(&mut self, event: &crossterm::event::Event) -> Option<AppMessage> {
+    fn handle_event(&mut self, event: &Event) -> Option<AppMessage> {
         if let Event::Key(key) = event {
             match key.code {
                 KeyCode::Enter if key.kind == KeyEventKind::Press => {
@@ -37,7 +37,7 @@ impl UIComponent<AppMessage> for RenamePopup {
     fn ui(&self, buffer: &mut ratatui::prelude::Buffer, area: ratatui::prelude::Rect) {
         use ratatui::layout::Constraint as C;
         let area = ui::center_box(area, C::Length(22), C::Length(3));
-        self.name.widget().render(area, buffer);
+        self.name.render(area, buffer);
     }
 }
 

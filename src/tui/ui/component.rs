@@ -1,4 +1,4 @@
-use crossterm::event::Event;
+use ratatui::crossterm::event::Event;
 use ratatui::{buffer::Buffer, layout::Rect};
 
 pub trait UIComponent<T> {

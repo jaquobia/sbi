@@ -1,8 +1,7 @@
 use std::io::Stdout;
 
-use crossterm::{
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand,
+use ratatui::crossterm::{
+    self, terminal::{EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand
 };
 use itertools::Either;
 use ratatui::{
@@ -58,7 +57,7 @@ impl RenderStorage {
     }
 
     pub fn draw(&mut self, app: &AppSBI, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> std::io::Result<()> {
-        terminal.draw(|frame| Self::ui(frame, &app, self))?;
+        terminal.draw(|frame| Self::ui(frame, app, self))?;
         Ok(())
     }
 
@@ -196,7 +195,7 @@ impl RenderStorage {
     }
 
     fn ui(frame: &mut Frame, app: &AppSBI, render_storage: &mut RenderStorage) {
-        let area = frame.size();
+        let area = frame.area();
         let buffer = frame.buffer_mut();
 
         use Constraint as C;

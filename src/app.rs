@@ -15,7 +15,7 @@ use crate::{
     workshop_downloader, STARBOUND_BOOT_CONFIG_NAME,
 };
 use anyhow::{anyhow, Result};
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use log::error;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;

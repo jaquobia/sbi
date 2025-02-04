@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
@@ -74,7 +74,13 @@ impl Spinner {
             _ => false,
         }
     }
-    pub fn widget(&self) -> SpinnerWidget<'_> {
+}
+
+impl Widget for &Spinner {
+    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
+    where
+        Self: Sized,
+    {
         let (left_arrow_style, left_arrow) = if self.selected == 0 {
             (
                 &self.style_move_unavailable,
@@ -110,21 +116,6 @@ impl Spinner {
             Span::raw(" "),
             Span::styled(right_arrow, *right_arrow_style),
         ]);
-        SpinnerWidget {
-            paragraph: Paragraph::new(spinner_text).centered(),
-        }
-    }
-}
-
-pub struct SpinnerWidget<'a> {
-    paragraph: Paragraph<'a>,
-}
-
-impl<'a> Widget for SpinnerWidget<'a> {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
-    where
-        Self: Sized,
-    {
-        self.paragraph.render(area, buf);
+        Paragraph::new(spinner_text).centered().render(area, buf);
     }
 }

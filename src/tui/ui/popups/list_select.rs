@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEventKind};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::{style::{Color, Style}, text::{Line, Text}, widgets::{Block, Borders, Clear, Paragraph, Widget}};
 
 use crate::{app::AppMessage, tui::ui::{self, component::UIComponent}};
@@ -42,7 +42,7 @@ impl ListSelectPopup<AppMessage> {
 }
 
 impl UIComponent<AppMessage> for ListSelectPopup<AppMessage> {
-    fn handle_event(&mut self, event: &crossterm::event::Event) -> Option<AppMessage> {
+    fn handle_event(&mut self, event: &Event) -> Option<AppMessage> {
         if let Event::Key(key) = event {
             if key.kind != KeyEventKind::Press { return None; }
             match key.code {

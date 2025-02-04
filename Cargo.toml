@@ -7,18 +7,18 @@ edition = "2021"
 
 [dependencies]
 # Terminal Graphics
-ratatui = "0.27"
-crossterm = { version = "*", features = ["event-stream"] }
+ratatui = "0.29"
 
 # Tui Widgets
-tui-textarea = "0.5"
+tui-textarea = "0.7"
+throbber-widgets-tui = "0.8"
 
 # Directory Management
 directories = "5.0"
 
 # Error Management
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 
 # Json Parsing
 serde = { version = "1.0", features = ["derive"] }
@@ -26,10 +26,10 @@ serde_json = "1.0"
 rustc-hash = "2.0"
 
 # Itertools
-itertools = "0.13.0"
+itertools = "0.14"
 
 # Async
-tokio = { version = "1.36", features = ["full"] }
+tokio = { version = "1.39", features = ["full"] }
 tokio-util = "0.7"
 futures = "0.3"
 
@@ -41,9 +41,8 @@ clap_derive = "4.5"
 interprocess = { version = "2.2", features = ["tokio"] }
 
 # Web Requests
-reqwest = {version="0.12", features = ["json"]}
+reqwest = { version = "0.12", features = ["json"] }
 
 # Logging
 log = "0.4"
-flexi_logger = "0.28.0"
-throbber-widgets-tui = "0.6.0"
+flexi_logger = "0.29"
