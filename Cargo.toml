@@ -6,15 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# Terminal Graphics
-ratatui = "0.29"
+# # Terminal Graphics
+# ratatui = "0.29"
+#
+# # Tui Widgets
+# tui-textarea = "0.7"
+# throbber-widgets-tui = "0.8"
 
-# Tui Widgets
-tui-textarea = "0.7"
-throbber-widgets-tui = "0.8"
+# GUI Toolkit
+iced = "0.13"
 
 # Directory Management
-directories = "5.0"
+directories = "6.0"
 
 # Error Management
 anyhow = "1.0"

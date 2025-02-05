@@ -1,24 +1,22 @@
 // use std::sync::LazyLock;
 
 use anyhow::{anyhow, Result};
-use app::AppSBI;
-use cli_args::CliArgs;
 use directories::ProjectDirs;
 use flexi_logger::FileSpec;
 use interprocess::local_socket::{traits::tokio::{Listener, Stream}, GenericFilePath, GenericNamespaced, ListenerOptions, Name, NameType};
 use json::SBILaunchMessageJson;
 use log::{info, warn};
 use tokio::{io::{AsyncBufReadExt, AsyncWriteExt}, sync::mpsc::UnboundedSender};
+use application::Application;
 
 mod json;
 mod instance;
-mod tui;
 mod cli_args;
-mod app;
 mod workshop_downloader;
 mod game_launcher;
 mod mod_manifest;
 mod core;
+mod application;
 
 static ORGANIZATION_QUALIFIER: &str = "";
 static ORGANIZATION_NAME: &str = "";
@@ -128,6 +126,12 @@ async fn main() -> Result<()> {
         )
         .start()?;
 
+    let theme = |state: &Application| -> iced::Theme {
+        iced::Theme::TokyoNight
+    };
+
+    iced::application("SBI", Application::update, Application::view).theme(theme).run()?;
+
     // if cli_args.query {
     //     // flexi_logger::Logger::try_with_env_or_str("info")?.start()?;
     //     let name = get_pipe_name()?;
@@ -153,42 +157,42 @@ async fn main() -> Result<()> {
     //     info!("Attempting to launch game through default command: {:?}", default_command);
     //     // game_launcher::launch_default(default_command)?;
     // }
-    const OS_LD_LIBRARY_NAME: &str = "LD_LIBRARY_PATH";
-
-    let exec = "/home/jaquobia/steamapps/common/Starbound/linux/starbound";
-    let instance = "/home/jaquobia/steamapps/common/Starbound/";
-    let maybe_extra_ld_path: Option<std::path::PathBuf> = Some(std::path::PathBuf::from("/home/jaquobia/steamapps/common/Starbound/linux/"));
-
-    let mut ld_paths = vec![];
-    if let Some(extra_ld_path) = maybe_extra_ld_path {
-        ld_paths.push(extra_ld_path.to_path_buf());
-    }
-    if let Ok(system_ld_path) = std::env::var(OS_LD_LIBRARY_NAME) {
-        ld_paths.extend(std::env::split_paths(&system_ld_path).map(std::path::PathBuf::from));
-    };
-    let new_ld_path_var = std::env::join_paths(ld_paths)?;
-
-    info!(
-        "Launching {} with ld_path: {:?}",
-        exec,
-        new_ld_path_var
-    );
-
-    let mut command = tokio::process::Command::new(exec);
-    command.current_dir(instance);
-    let bootconfig = std::path::PathBuf::from(instance)
-        .join(STARBOUND_BOOT_CONFIG_NAME)
-        .display()
-        .to_string();
-    command.env(OS_LD_LIBRARY_NAME, new_ld_path_var);
-    // command.args(["-bootconfig", &bootconfig]);
-
-    command.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-    // tokio::task::spawn(async move {
-        let exit = command.spawn()?.wait().await?;
-        info!("{exit}");
-    //     let ret: Result<()> = Ok(());
-    //     ret
-    // }).await??;
+    // const OS_LD_LIBRARY_NAME: &str = "LD_LIBRARY_PATH";
+    //
+    // let exec = "/home/jaquobia/steamapps/common/Starbound/linux/starbound";
+    // let instance = "/home/jaquobia/steamapps/common/Starbound/";
+    // let maybe_extra_ld_path: Option<std::path::PathBuf> = Some(std::path::PathBuf::from("/home/jaquobia/steamapps/common/Starbound/linux/"));
+    //
+    // let mut ld_paths = vec![];
+    // if let Some(extra_ld_path) = maybe_extra_ld_path {
+    //     ld_paths.push(extra_ld_path.to_path_buf());
+    // }
+    // if let Ok(system_ld_path) = std::env::var(OS_LD_LIBRARY_NAME) {
+    //     ld_paths.extend(std::env::split_paths(&system_ld_path).map(std::path::PathBuf::from));
+    // };
+    // let new_ld_path_var = std::env::join_paths(ld_paths)?;
+    //
+    // info!(
+    //     "Launching {} with ld_path: {:?}",
+    //     exec,
+    //     new_ld_path_var
+    // );
+    //
+    // let mut command = tokio::process::Command::new(exec);
+    // command.current_dir(instance);
+    // let bootconfig = std::path::PathBuf::from(instance)
+    //     .join(STARBOUND_BOOT_CONFIG_NAME)
+    //     .display()
+    //     .to_string();
+    // command.env(OS_LD_LIBRARY_NAME, new_ld_path_var);
+    // // command.args(["-bootconfig", &bootconfig]);
+    //
+    // command.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    // // tokio::task::spawn(async move {
+    //     let exit = command.spawn()?.wait().await?;
+    //     info!("{exit}");
+    // //     let ret: Result<()> = Ok(());
+    // //     ret
+    // // }).await??;
     Ok(())
 }
