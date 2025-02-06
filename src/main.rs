@@ -1,12 +1,9 @@
 // use std::sync::LazyLock;
 
-use anyhow::{anyhow, Result};
+// use anyhow::Result;
 use directories::ProjectDirs;
-use flexi_logger::FileSpec;
-use interprocess::local_socket::{traits::tokio::{Listener, Stream}, GenericFilePath, GenericNamespaced, ListenerOptions, Name, NameType};
-use json::SBILaunchMessageJson;
-use log::{info, warn};
-use tokio::{io::{AsyncBufReadExt, AsyncWriteExt}, sync::mpsc::UnboundedSender};
+use flexi_logger::{FileSpec, FlexiLoggerError};
+use iced::Task;
 use application::Application;
 
 mod json;
@@ -31,90 +28,19 @@ static STARBOUND_BOOT_CONFIG_NAME: &str = "sbinit.config";
 static LOCAL_PIPE_NAME: &str = "@SBI_PIPE_NAME";
 static LOCAL_PIPE_FS_NAME: &str = "/tmp/@SBI_PIPE_NAME";
 
-// static DIRECTORIES : LazyLock<ProjectDirs> = LazyLock::new(|| {
-//     ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME).expect("Could not read project directories")
-// });
-
-// Returns a platform accepted pipe name, preferring namespaced names if available
-fn get_pipe_name() -> Result<Name<'static>> {
-    let name = if GenericNamespaced::is_supported() {
-        interprocess::local_socket::ToNsName::to_ns_name::<GenericNamespaced>(LOCAL_PIPE_NAME)?
-	} else {
-        interprocess::local_socket::ToFsName::to_fs_name::<GenericFilePath>(LOCAL_PIPE_FS_NAME)?
-	};
-    Ok(name)
+#[derive(Debug, thiserror::Error)]
+enum SBIInitializationError {
+    #[error("Could not find the relevant folders to store application data in")]
+    NoProjectDirectories,
+    #[error("...")]
+    LoggerFailure(#[from] FlexiLoggerError),
+    #[error("...")]
+    IcedApplicationError(#[from] iced::Error),
 }
 
-/// Run the sbi service asyncronously which can be connected to with `connect_to_existing_sbi_service`.
-/// This service will create a local pipe that will transmit a `json::SBILaunchMessage` if one has
-/// been queued.
-/// This service expects clients to connect from a steam launch request or that clients have a
-/// fallback if the steam service was launched manually
-///
-/// This function will return an error if the pipe is already in use or cannot be created for some other generic IO reason.
-pub async fn spawn_sbi_service() -> Result<UnboundedSender<SBILaunchMessageJson>> {
-    let (sender, reciver) = tokio::sync::mpsc::unbounded_channel::<SBILaunchMessageJson>();
-
-    let name = get_pipe_name()?;
-    let listener = match interprocess::local_socket::tokio::Listener::from_options(ListenerOptions::new().name(name)) {
-        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
-            return Err(anyhow!("SBI pipe {:?} is already running somewhere...", get_pipe_name()))
-        }
-        Err(e) => {
-            return Err(e.into());
-        }
-        Ok(x) => x,
-    };
-    tokio::spawn(async {
-
-        // Capture environment
-        let mut reciver = reciver;
-        let listener = listener;
-
-        // "async block doesn't return Result type" so wrapping failable code in a function
-        async fn accept_client(listener: &interprocess::local_socket::tokio::Listener, reciver: &mut tokio::sync::mpsc::UnboundedReceiver<SBILaunchMessageJson>) -> Result<()> {
-            // SBI slave has requested launch information
-            let (_, mut writer) = listener.accept().await?.split();
-
-            if let Ok(x) = reciver.try_recv() {
-                let bytes = serde_json::to_vec::<SBILaunchMessageJson>(&x)?;
-                writer.write_all(&bytes).await?;
-            }
-            Ok(())
-        } // end fn
-
-        loop {
-            let _ = accept_client(&listener, &mut reciver).await;
-        }
-    });
-    Ok(sender)
-}
-
-/// Get the launch message from an SBI service and launch starbound.
-///
-/// # Errors
-///
-/// This function will return an error if the message cannot be parsed, the cwd does not have
-/// read permissions, or the game launch fails for some reason.
-async fn connect_to_existing_sbi_service(local_socket: interprocess::local_socket::tokio::Stream) -> Result<()> {
-    info!("Launching starbound through steam!");
-
-    let (recv, _) = local_socket.split();
-    let mut recv = tokio::io::BufReader::new(recv);
-    let mut buffer = String::with_capacity(2048);
-    recv.read_line(&mut buffer).await?;
-    let launch_message: json::SBILaunchMessageJson = serde_json::from_str(&buffer)?;
-
-    let executable_path = launch_message.exececutable_path;
-    let maybe_extra_ld_path = launch_message.ld_library_path.as_deref();
-    let instance_path = launch_message.instance_path.unwrap_or_else(|| std::env::current_dir().expect("Current working directory cannot be read from"));
-    game_launcher::launch_instance_cli(&executable_path, &instance_path, maybe_extra_ld_path)
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // TODO: This does not change after initialization, maybe replace storage with static reference?
-    let proj_dirs = ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME).ok_or(anyhow!("Can't find home directory"))?;
+fn main() -> Result<(), SBIInitializationError> {
+    /*TODO: Introduce Environment Variables for application storage location*/
+    let proj_dirs = ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME).ok_or(SBIInitializationError::NoProjectDirectories)?;
 
     // let cli_args: CliArgs = clap::Parser::try_parse()?;
     let _log_handle = flexi_logger::Logger::try_with_env_or_str("info")?
@@ -126,11 +52,9 @@ async fn main() -> Result<()> {
         )
         .start()?;
 
-    let theme = |state: &Application| -> iced::Theme {
-        iced::Theme::TokyoNight
-    };
 
-    iced::application("SBI", Application::update, Application::view).theme(theme).run()?;
+    iced::application("SBI", Application::update, Application::view).theme(Application::theme).run_with(|| { (Application::new(proj_dirs), Task::none()) })?;
+    Ok(())
 
     // if cli_args.query {
     //     // flexi_logger::Logger::try_with_env_or_str("info")?.start()?;
@@ -194,5 +118,4 @@ async fn main() -> Result<()> {
     // //     let ret: Result<()> = Ok(());
     // //     ret
     // // }).await??;
-    Ok(())
 }
