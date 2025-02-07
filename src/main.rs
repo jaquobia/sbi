@@ -53,12 +53,13 @@ fn main() -> Result<(), SBIInitializationError> {
         )
         .start()?;
 
-    let profiles_dir = proj_dirs.data_dir().join("profiles");
+    let application = Application::new(proj_dirs);
+    let profiles_dir = application.profiles_directory();
     iced::application("SBI", Application::update, Application::view)
         .theme(Application::theme)
         .run_with(move || {
             (
-                Application::new(proj_dirs),
+                application,
                 Task::perform(
                     Application::find_profiles(profiles_dir),
                     Message::FetchedProfiles,

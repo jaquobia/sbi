@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use directories::ProjectDirs;
 use iced::{
     alignment::Vertical,
@@ -8,6 +10,8 @@ use iced::{
 };
 
 use crate::profile::Profile;
+
+// Executables
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Executable {
@@ -28,6 +32,8 @@ impl std::fmt::Display for Executable {
     }
 }
 
+// New Profile Submenu
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NewProfileSubmenuMessage {
     TextFieldEditName(String),
@@ -39,7 +45,6 @@ enum NewProfileType {
 }
 
 impl NewProfileType {
-
     fn update(&mut self, message: NewProfileSubmenuMessage) -> Task<Message> {
         match message {
             NewProfileSubmenuMessage::TextFieldEditName(s) => {
@@ -56,14 +61,23 @@ impl NewProfileType {
     fn view(&self) -> Element<'_, Message> {
         match self {
             Self::Empty { name } => {
-
+                let create_button_message = (!name.is_empty()).then_some(Message::CreateProfile);
                 iced::widget::column![
                     iced::widget::column![
                         iced::widget::text("New Profile - Empty"),
-                        iced::widget::text_input("-Name-", name).on_input(|s|Message::NewProfileMessage(NewProfileSubmenuMessage::TextFieldEditName(s))),
-                    ].spacing(8),
+                        iced::widget::text_input("-Name-", name).on_input(|s| {
+                            Message::NewProfileMessage(NewProfileSubmenuMessage::TextFieldEditName(
+                                s,
+                            ))
+                        }),
+                    ]
+                    .spacing(8),
                     iced::widget::vertical_space(),
-                    iced::widget::button("Back").on_press(Message::ButtonNewProfilePressed)
+                    iced::widget::row![
+                        iced::widget::button("Back").on_press(Message::ButtonNewProfilePressed),
+                        iced::widget::horizontal_space(),
+                        iced::widget::button("Create").on_press_maybe(create_button_message),
+                    ]
                 ]
                 .padding(5)
                 .into()
@@ -71,6 +85,8 @@ impl NewProfileType {
         }
     }
 }
+
+// Main Application
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
@@ -92,6 +108,7 @@ pub struct Application {
 #[derive(Debug, Clone)]
 pub enum Message {
     FetchedProfiles(Vec<Profile>),
+    CreateProfile,
     SelectExecutable(Executable),
     ButtonSettingsPressed,
     ButtonLaunchPressed,
@@ -128,6 +145,19 @@ impl Application {
                 self.submenu = None;
                 Task::none()
             }
+            Message::CreateProfile => {
+                if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_ref() {
+                    match t {
+                        NewProfileType::Empty { name } => {
+                            println!("Creating new empty profile - {name}");
+                            // Make a new profile with just a name
+                        }
+                    }
+                }
+                self.submenu = None;
+                let profiles_dir = self.profiles_directory();
+                Task::perform(Self::find_profiles(profiles_dir), Message::FetchedProfiles)
+            }
             Message::ToggleDebug(state) => {
                 println!("Toggling debug: {}", state);
                 self.debug = state;
@@ -159,7 +189,9 @@ impl Application {
             }
             Message::ButtonNewProfileEmptyPressed => {
                 println!("New profile empty");
-                self.submenu = Some(SubMenu::NewProfile(Some(NewProfileType::Empty { name: String::from("") })));
+                self.submenu = Some(SubMenu::NewProfile(Some(NewProfileType::Empty {
+                    name: String::from(""),
+                })));
                 Task::none()
             }
             Message::SelectProfile(i) => {
@@ -182,8 +214,11 @@ impl Application {
                     Task::none()
                 }
             }
-
         }
+    }
+
+    pub fn profiles_directory(&self) -> PathBuf {
+        self.directories.data_dir().join("profiles")
     }
 
     /// Returns a collection of all valid profiles in the profiles directory.
@@ -245,12 +280,10 @@ impl Application {
         let content = iced::widget::column![body, controls,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
-                SubMenu::NewProfile(t) => {
-                    match t {
-                        None => self.view_submenu_new_profile(),
-                        Some(t) => t.view(),
-                    }
-                }
+                SubMenu::NewProfile(t) => match t {
+                    None => self.view_submenu_new_profile(),
+                    Some(t) => t.view(),
+                },
                 // SubMenu::NewProfileEmpty => self.view_submenu_new_profile_empty(),
                 SubMenu::ConfigureProfile => self.view_submenu_configure_profile(),
                 SubMenu::Settings => self.view_submenu_settings(),
@@ -298,6 +331,8 @@ impl Application {
             .into()
     }
 
+    /// Preconfigured method of drawing containers in pop-ups. Can dead-lock the user if
+    /// no method of closing the popup is provided.
     fn view_submenu(content_in: Element<'_, Message>) -> Element<'_, Message> {
         let popup_style = |theme: &iced::Theme| -> container::Style {
             let palette = theme.extended_palette();
@@ -346,7 +381,8 @@ impl Application {
                 iced::widget::button("Empty").on_press(Message::ButtonNewProfileEmptyPressed),
                 iced::widget::button("Vanilla (Steam)"),
                 iced::widget::button("Collection (Steam)"),
-            ].spacing(8),
+            ]
+            .spacing(8),
             iced::widget::vertical_space(),
             iced::widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
         ]
