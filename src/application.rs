@@ -1,7 +1,7 @@
 use directories::ProjectDirs;
 use iced::{
     alignment::Vertical,
-    widget::{container, Container},
+    widget::container,
     Element,
     Length::{self, Fill},
     Task,
@@ -28,10 +28,53 @@ impl std::fmt::Display for Executable {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NewProfileSubmenuMessage {
+    TextFieldEditName(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum NewProfileType {
+    Empty { name: String },
+}
+
+impl NewProfileType {
+
+    fn update(&mut self, message: NewProfileSubmenuMessage) -> Task<Message> {
+        match message {
+            NewProfileSubmenuMessage::TextFieldEditName(s) => {
+                match self {
+                    Self::Empty { name } => {
+                        *name = s;
+                    }
+                }
+                Task::none()
+            }
+        }
+    }
+
+    fn view(&self) -> Element<'_, Message> {
+        match self {
+            Self::Empty { name } => {
+
+                iced::widget::column![
+                    iced::widget::column![
+                        iced::widget::text("New Profile - Empty"),
+                        iced::widget::text_input("-Name-", name).on_input(|s|Message::NewProfileMessage(NewProfileSubmenuMessage::TextFieldEditName(s))),
+                    ].spacing(8),
+                    iced::widget::vertical_space(),
+                    iced::widget::button("Back").on_press(Message::ButtonNewProfilePressed)
+                ]
+                .padding(5)
+                .into()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
-    NewProfile,
-    NewProfileEmpty,
+    NewProfile(Option<NewProfileType>),
     ConfigureProfile,
     Settings,
 }
@@ -44,8 +87,6 @@ pub struct Application {
     submenu: Option<SubMenu>,
     executable_selection: Option<Executable>,
     selected_profile: Option<usize>,
-
-    new_profile_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -59,7 +100,7 @@ pub enum Message {
     ButtonNewProfileEmptyPressed,
     ToggleDebug(bool),
     SelectProfile(usize),
-    TextFieldNewProfileNameChanged(String),
+    NewProfileMessage(NewProfileSubmenuMessage),
 }
 
 impl Application {
@@ -71,8 +112,6 @@ impl Application {
             submenu: None,
             executable_selection: None,
             selected_profile: None,
-
-            new_profile_name: String::from(""),
         }
     }
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -115,12 +154,12 @@ impl Application {
             }
             Message::ButtonNewProfilePressed => {
                 println!("New profile pressed...");
-                self.submenu = Some(SubMenu::NewProfile);
+                self.submenu = Some(SubMenu::NewProfile(None));
                 Task::none()
             }
             Message::ButtonNewProfileEmptyPressed => {
                 println!("New profile empty");
-                self.submenu = Some(SubMenu::NewProfileEmpty);
+                self.submenu = Some(SubMenu::NewProfile(Some(NewProfileType::Empty { name: String::from("") })));
                 Task::none()
             }
             Message::SelectProfile(i) => {
@@ -135,9 +174,13 @@ impl Application {
                 }
                 Task::none()
             }
-            Message::TextFieldNewProfileNameChanged(s) => {
-                self.new_profile_name = s;
-                Task::none()
+            Message::NewProfileMessage(m) => {
+                if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_mut() {
+                    t.update(m)
+                } else {
+                    eprintln!("Error: Tried to send a NewProfile message while not in a valid NewProfile submenu");
+                    Task::none()
+                }
             }
 
         }
@@ -200,10 +243,15 @@ impl Application {
         // Profiles Menu
         let body = self.view_select_profile();
         let content = iced::widget::column![body, controls,].padding(5);
-        let popup = self.submenu.map(|m| {
+        let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
-                SubMenu::NewProfile => self.view_submenu_new_profile(),
-                SubMenu::NewProfileEmpty => self.view_submenu_new_profile_empty(),
+                SubMenu::NewProfile(t) => {
+                    match t {
+                        None => self.view_submenu_new_profile(),
+                        Some(t) => t.view(),
+                    }
+                }
+                // SubMenu::NewProfileEmpty => self.view_submenu_new_profile_empty(),
                 SubMenu::ConfigureProfile => self.view_submenu_configure_profile(),
                 SubMenu::Settings => self.view_submenu_settings(),
             })
@@ -301,18 +349,6 @@ impl Application {
             ].spacing(8),
             iced::widget::vertical_space(),
             iced::widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
-        ]
-        .padding(5)
-        .into()
-    }
-    fn view_submenu_new_profile_empty(&self) -> Element<'_, Message> {
-        iced::widget::column![
-            iced::widget::column![
-                iced::widget::text("New Profile - Empty"),
-                iced::widget::text_input("-Name-", &self.new_profile_name).on_input(Message::TextFieldNewProfileNameChanged),
-            ].spacing(8),
-            iced::widget::vertical_space(),
-            iced::widget::button("Back").on_press(Message::ButtonNewProfilePressed)
         ]
         .padding(5)
         .into()
