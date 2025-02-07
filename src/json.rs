@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProfileJson {
     pub name: String,
-    pub executable: Option<String>,
     pub additional_assets: Option<Vec<String>>,
     pub collection_id: Option<String>,
 }

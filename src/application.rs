@@ -1,6 +1,7 @@
 use directories::ProjectDirs;
 use iced::{
     alignment::Vertical,
+    widget::{container, Container},
     Element,
     Length::{self, Fill},
     Task,
@@ -27,10 +28,10 @@ impl std::fmt::Display for Executable {
     }
 }
 
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
-    #[default]
-    SelectProfile,
+    NewProfile,
+    NewProfileEmpty,
     ConfigureProfile,
     Settings,
 }
@@ -40,9 +41,11 @@ pub struct Application {
     directories: ProjectDirs,
     profiles: Vec<Profile>,
     debug: bool,
-    submenu: SubMenu,
+    submenu: Option<SubMenu>,
     executable_selection: Option<Executable>,
     selected_profile: Option<usize>,
+
+    new_profile_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -51,9 +54,12 @@ pub enum Message {
     SelectExecutable(Executable),
     ButtonSettingsPressed,
     ButtonLaunchPressed,
-    ButtonBackPressed,
+    ButtonExitSubmenuPressed,
+    ButtonNewProfilePressed,
+    ButtonNewProfileEmptyPressed,
     ToggleDebug(bool),
     SelectProfile(usize),
+    TextFieldNewProfileNameChanged(String),
 }
 
 impl Application {
@@ -62,9 +68,11 @@ impl Application {
             directories,
             profiles: vec![],
             debug: false,
-            submenu: SubMenu::default(),
+            submenu: None,
             executable_selection: None,
             selected_profile: None,
+
+            new_profile_name: String::from(""),
         }
     }
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -77,8 +85,8 @@ impl Application {
                 // Unlike a tui environment, the user can just easily
                 // re-select a profile.
                 self.selected_profile = None;
-                // TODO: This may be deleted 
-                self.submenu = SubMenu::SelectProfile;
+                // TODO: This may be deleted
+                self.submenu = None;
                 Task::none()
             }
             Message::ToggleDebug(state) => {
@@ -93,16 +101,26 @@ impl Application {
             }
             Message::ButtonSettingsPressed => {
                 println!("Settings was pressed");
-                self.submenu = SubMenu::ConfigureProfile;
+                self.submenu = Some(SubMenu::ConfigureProfile);
                 Task::none()
             }
-            Message::ButtonBackPressed => {
+            Message::ButtonExitSubmenuPressed => {
                 println!("Back...");
-                self.submenu = SubMenu::SelectProfile;
+                self.submenu = None;
                 Task::none()
             }
             Message::ButtonLaunchPressed => {
                 println!("Launching starbound...");
+                Task::none()
+            }
+            Message::ButtonNewProfilePressed => {
+                println!("New profile pressed...");
+                self.submenu = Some(SubMenu::NewProfile);
+                Task::none()
+            }
+            Message::ButtonNewProfileEmptyPressed => {
+                println!("New profile empty");
+                self.submenu = Some(SubMenu::NewProfileEmpty);
                 Task::none()
             }
             Message::SelectProfile(i) => {
@@ -110,13 +128,18 @@ impl Application {
                     Some(name) => {
                         println!("Selecting profile {} - {:?}", i, name);
                         self.selected_profile = Some(i);
-                    },
+                    }
                     None => {
                         eprintln!("Selected profile {i} is out of bounds of the profile list of length {}!", self.profiles.len());
                     }
                 }
                 Task::none()
             }
+            Message::TextFieldNewProfileNameChanged(s) => {
+                self.new_profile_name = s;
+                Task::none()
+            }
+
         }
     }
 
@@ -139,17 +162,14 @@ impl Application {
 
     pub fn view(&self) -> Element<'_, Message> {
         // Bottom Bar
-        let (omni_button_label, omni_button_message) = match self.submenu {
-            SubMenu::SelectProfile => (
-                "Configure Profile",
-                self.selected_profile
-                    .map(|_p_i| Message::ButtonSettingsPressed),
-            ),
-            SubMenu::ConfigureProfile => ("Back", Some(Message::ButtonBackPressed)),
-            SubMenu::Settings => ("Back", Some(Message::ButtonBackPressed)),
-        };
-        let settings_button =
-            iced::widget::button(omni_button_label).on_press_maybe(omni_button_message);
+        let configure_profile_buttton_message = self
+            .selected_profile
+            .map(|_p_i| Message::ButtonSettingsPressed);
+        let settings_button = iced::widget::button("Configure Profile")
+            .on_press_maybe(configure_profile_buttton_message);
+
+        let new_profile_button =
+            iced::widget::button("New Profile").on_press(Message::ButtonNewProfilePressed);
 
         let launch_button_message = self
             .selected_profile
@@ -164,9 +184,11 @@ impl Application {
         .placeholder("Select an executable...");
         let debug_checkbox =
             iced::widget::checkbox("Debug", self.debug).on_toggle(Message::ToggleDebug);
+
         let controls_right = iced::widget::row![executable_picker, launch_button,].spacing(5);
         let controls = iced::widget::row![
             settings_button,
+            new_profile_button,
             debug_checkbox,
             iced::widget::horizontal_space(),
             controls_right,
@@ -176,15 +198,21 @@ impl Application {
         .align_y(Vertical::Center);
 
         // Profiles Menu
-        let body = match self.submenu {
-            SubMenu::SelectProfile => self.view_select_profile(),
-            SubMenu::ConfigureProfile => self.view_configure_profile(),
-            SubMenu::Settings => self.view_settings(),
-        };
-        let content = iced::widget::column![body, controls,];
+        let body = self.view_select_profile();
+        let content = iced::widget::column![body, controls,].padding(5);
+        let popup = self.submenu.map(|m| {
+            Self::view_submenu(match m {
+                SubMenu::NewProfile => self.view_submenu_new_profile(),
+                SubMenu::NewProfileEmpty => self.view_submenu_new_profile_empty(),
+                SubMenu::ConfigureProfile => self.view_submenu_configure_profile(),
+                SubMenu::Settings => self.view_submenu_settings(),
+            })
+        });
+        let stacked_content =
+            iced::widget::stack(std::iter::once(content.into())).push_maybe(popup);
 
         // Total content
-        let content: Element<'_, Message> = content.padding(5).into();
+        let content: Element<'_, Message> = stacked_content.into();
         if self.debug {
             content.explain(iced::Color::WHITE)
         } else {
@@ -222,11 +250,79 @@ impl Application {
             .into()
     }
 
-    fn view_configure_profile(&self) -> Element<'_, Message> {
-        iced::widget::row![].height(Length::Fill).into()
+    fn view_submenu(content_in: Element<'_, Message>) -> Element<'_, Message> {
+        let popup_style = |theme: &iced::Theme| -> container::Style {
+            let palette = theme.extended_palette();
+
+            container::Style {
+                background: Some(palette.background.weak.color.into()),
+                border: iced::border::rounded(4),
+                ..container::Style::default()
+            }
+        };
+        // Dyanmically size the popup to be 50% of the window's width and height
+        let inner_popup = iced::widget::column![
+            iced::widget::vertical_space(),
+            iced::widget::row![
+                iced::widget::horizontal_space(),
+                iced::widget::container(content_in)
+                    .width(Length::FillPortion(2))
+                    .height(Length::FillPortion(2))
+                    .style(popup_style),
+                iced::widget::horizontal_space(),
+            ],
+            iced::widget::vertical_space(),
+        ];
+        // Fade the lower layer and intercept mouse inputs, center the popup
+        iced::widget::opaque(
+            iced::widget::center(iced::widget::opaque(inner_popup)).style(|_theme| {
+                container::Style {
+                    background: Some(
+                        iced::Color {
+                            a: 0.8,
+                            ..iced::Color::BLACK
+                        }
+                        .into(),
+                    ),
+                    ..Default::default()
+                }
+            }),
+        )
+        // .explain(iced::Color::from_rgb(1.0, 0.5, 0.0))
     }
 
-    fn view_settings(&self) -> Element<'_, Message> {
-        iced::widget::row![].height(Length::Fill).into()
+    fn view_submenu_new_profile(&self) -> Element<'_, Message> {
+        iced::widget::column![
+            iced::widget::column![
+                iced::widget::text("New Profile"),
+                iced::widget::button("Empty").on_press(Message::ButtonNewProfileEmptyPressed),
+                iced::widget::button("Vanilla (Steam)"),
+                iced::widget::button("Collection (Steam)"),
+            ].spacing(8),
+            iced::widget::vertical_space(),
+            iced::widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
+        ]
+        .padding(5)
+        .into()
+    }
+    fn view_submenu_new_profile_empty(&self) -> Element<'_, Message> {
+        iced::widget::column![
+            iced::widget::column![
+                iced::widget::text("New Profile - Empty"),
+                iced::widget::text_input("-Name-", &self.new_profile_name).on_input(Message::TextFieldNewProfileNameChanged),
+            ].spacing(8),
+            iced::widget::vertical_space(),
+            iced::widget::button("Back").on_press(Message::ButtonNewProfilePressed)
+        ]
+        .padding(5)
+        .into()
+    }
+
+    fn view_submenu_configure_profile(&self) -> Element<'_, Message> {
+        iced::widget::row![].into()
+    }
+
+    fn view_submenu_settings(&self) -> Element<'_, Message> {
+        iced::widget::row![].into()
     }
 }
