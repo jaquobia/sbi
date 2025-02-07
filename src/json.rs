@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use rustc_hash::FxHashMap as HashMap;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct InstanceDataJson {
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ProfileJson {
     pub name: String,
     pub executable: Option<String>,
     pub additional_assets: Option<Vec<String>>,

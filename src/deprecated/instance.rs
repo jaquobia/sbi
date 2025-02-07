@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 
-use crate::json::InstanceDataJson;
+use crate::json::ProfileJson;
 
 pub enum ModifyInstance {
     Name(String),
@@ -9,15 +9,15 @@ pub enum ModifyInstance {
     Collection(Option<String>)
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Instance {
     folder_path: PathBuf,
-    json: InstanceDataJson,
+    json: ProfileJson,
 }
 
 impl Instance {
 
-    pub fn from_json(json: InstanceDataJson, path: &Path) -> Result<Self> {
+    pub fn from_json(json: ProfileJson, path: &Path) -> Result<Self> {
         let folder_path = path.parent().ok_or(anyhow!("Instance not in a valid folder??"))?.to_owned();
         Ok(Self {
             folder_path,
@@ -53,7 +53,7 @@ impl Instance {
         &self.folder_path
     }
 
-    pub fn to_json(&self) -> &InstanceDataJson {
+    pub fn to_json(&self) -> &ProfileJson {
         &self.json
     }
 }

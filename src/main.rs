@@ -1,25 +1,25 @@
 // use std::sync::LazyLock;
 
 // use anyhow::Result;
+use application::{Application, Message};
 use directories::ProjectDirs;
 use flexi_logger::{FileSpec, FlexiLoggerError};
 use iced::Task;
-use application::Application;
 
-mod json;
-mod instance;
-mod cli_args;
-mod workshop_downloader;
-mod game_launcher;
-mod mod_manifest;
-mod core;
 mod application;
+mod cli_args;
+// mod core;
+mod game_launcher;
+mod json;
+mod mod_manifest;
+mod profile;
+// mod workshop_downloader;
 
 static ORGANIZATION_QUALIFIER: &str = "";
 static ORGANIZATION_NAME: &str = "";
 static APPLICATION_NAME: &str = "sbi";
 
-static INSTANCE_JSON_NAME: &str = "instance.json";
+static PROFILE_JSON_NAME: &str = "profile.json";
 static SBI_CONFIG_JSON_NAME: &str = "config.json";
 
 static STARBOUND_STEAM_ID: &str = "211820";
@@ -40,20 +40,31 @@ enum SBIInitializationError {
 
 fn main() -> Result<(), SBIInitializationError> {
     /*TODO: Introduce Environment Variables for application storage location*/
-    let proj_dirs = ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME).ok_or(SBIInitializationError::NoProjectDirectories)?;
+    let proj_dirs = ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME)
+        .ok_or(SBIInitializationError::NoProjectDirectories)?;
 
     // let cli_args: CliArgs = clap::Parser::try_parse()?;
     let _log_handle = flexi_logger::Logger::try_with_env_or_str("info")?
         .log_to_file(
             FileSpec::default()
-            .directory(proj_dirs.data_dir())
-            .basename("sbi")
-            .suppress_timestamp()
+                .directory(proj_dirs.data_dir())
+                .basename("sbi")
+                .suppress_timestamp(),
         )
         .start()?;
 
-
-    iced::application("SBI", Application::update, Application::view).theme(Application::theme).run_with(|| { (Application::new(proj_dirs), Task::none()) })?;
+    let profiles_dir = proj_dirs.data_dir().join("profiles");
+    iced::application("SBI", Application::update, Application::view)
+        .theme(Application::theme)
+        .run_with(move || {
+            (
+                Application::new(proj_dirs),
+                Task::perform(
+                    Application::find_profiles(profiles_dir),
+                    Message::FetchedProfiles,
+                ),
+            )
+        })?;
     Ok(())
 
     // if cli_args.query {
