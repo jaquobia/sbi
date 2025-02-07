@@ -1,5 +1,3 @@
-use std::io;
-
 use directories::ProjectDirs;
 use iced::{
     alignment::Vertical,
@@ -40,7 +38,7 @@ enum SubMenu {
 #[derive(Debug, Clone)]
 pub struct Application {
     directories: ProjectDirs,
-    profiles: Option<Vec<Profile>>,
+    profiles: Vec<Profile>,
     debug: bool,
     submenu: SubMenu,
     executable_selection: Option<Executable>,
@@ -62,7 +60,7 @@ impl Application {
     pub fn new(directories: ProjectDirs) -> Self {
         Self {
             directories,
-            profiles: None,
+            profiles: vec![],
             debug: false,
             submenu: SubMenu::default(),
             executable_selection: None,
@@ -73,7 +71,14 @@ impl Application {
         match message {
             Message::FetchedProfiles(profiles) => {
                 println!("Fetched profiles using async tasks! ({})", profiles.len());
-                self.profiles = Some(profiles);
+                self.profiles = profiles;
+                // Remove selected profile. There's no gurantee the previously selected profile
+                // will be in the same place nor still exist after a fetch.
+                // Unlike a tui environment, the user can just easily
+                // re-select a profile.
+                self.selected_profile = None;
+                // TODO: This may be deleted 
+                self.submenu = SubMenu::SelectProfile;
                 Task::none()
             }
             Message::ToggleDebug(state) => {
@@ -101,9 +106,14 @@ impl Application {
                 Task::none()
             }
             Message::SelectProfile(i) => {
-                if let Some(name) = self.profiles.as_ref().map(|v| v[i].name()) {
-                    println!("Selecting profile {} - {}", i, name);
-                    self.selected_profile = Some(i);
+                match self.profiles.get(i) {
+                    Some(name) => {
+                        println!("Selecting profile {} - {:?}", i, name);
+                        self.selected_profile = Some(i);
+                    },
+                    None => {
+                        eprintln!("Selected profile {i} is out of bounds of the profile list of length {}!", self.profiles.len());
+                    }
                 }
                 Task::none()
             }
@@ -201,7 +211,7 @@ impl Application {
                     .into(),
             )
         };
-        let profiles = self.profiles.iter().flatten().map(|p| p.name());
+        let profiles = self.profiles.iter().map(|p| p.name());
         let profiles = iced::widget::keyed_column(profiles.enumerate().map(profile_to_widget))
             .width(Length::Fill)
             .align_items(iced::Alignment::Start)

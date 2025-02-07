@@ -3,7 +3,7 @@ use std::{fs, path::{Path, PathBuf}};
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 
-use crate::{instance::{Instance, ModifyInstance}, json::{InstanceDataJson, SBIConfig}, INSTANCE_JSON_NAME, SBI_CONFIG_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME};
+use crate::{instance::{Instance, ModifyInstance}, json::{ProfileJson, SBIConfig}, PROFILE_JSON_NAME, SBI_CONFIG_JSON_NAME, STARBOUND_BOOT_CONFIG_NAME};
 
 /// Turns instance.json into Instance struct
 pub fn parse_instance_paths_to_json(instance_json_paths: &[PathBuf]) -> Vec<Instance> {
@@ -26,7 +26,7 @@ pub fn get_instance_json_paths(instances_dir: &std::path::Path) -> Result<Vec<Pa
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| path.is_dir() || path.is_symlink())
-        .map(|path| path.join(INSTANCE_JSON_NAME))
+        .map(|path| path.join(PROFILE_JSON_NAME))
         .filter(|path| path.is_file())
         .collect();
     Ok(instances)
@@ -128,7 +128,7 @@ pub fn write_sbinit_config(instance: &Instance, config: &SBIConfig) -> Result<()
 /// # Errors
 ///
 /// This function will return an error if writing the instance or config fails.
-pub fn create_instance(instances_dir: &Path, data: InstanceDataJson, config: &SBIConfig) -> Result<()> {
+pub fn create_instance(instances_dir: &Path, data: ProfileJson, config: &SBIConfig) -> Result<()> {
     let name = data.name.replace(' ', "_");
     let mut instance_dir = instances_dir.join(&name);
     // Folders with the same name does not exactly mean instances with the same name
@@ -137,7 +137,7 @@ pub fn create_instance(instances_dir: &Path, data: InstanceDataJson, config: &SB
         instance_dir = instances_dir.join(format!("{}_{}", &name, i));
         i += 1;
     }
-    let instance = Instance::from_json(data, &instance_dir.join(INSTANCE_JSON_NAME))?;
+    let instance = Instance::from_json(data, &instance_dir.join(PROFILE_JSON_NAME))?;
     write_instance(&instance)?;
     write_sbinit_config(&instance, config)
 }
