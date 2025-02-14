@@ -12,7 +12,7 @@ impl Profile {
     fn from_json(json: ProfileJson, path: PathBuf) -> Profile {
         let path = path
             .parent()
-            .expect("Profile should have a parent, but does not??")
+            .expect("Profile json should have a parent, but does not??")
             .to_path_buf();
         Profile {
             path,
@@ -25,8 +25,21 @@ impl Profile {
     }
 }
 
+/// Returns a collection of all valid profiles in the profiles directory.
+/// A valid profile consists of a folder in the profiles directory which contains a valid json.
+pub async fn find_profiles(profiles_directory: std::path::PathBuf) -> Vec<Profile> {
+    let paths = crate::profile::collect_profile_json_paths(&profiles_directory);
+    match paths {
+        Ok(paths) => crate::profile::parse_profile_paths_to_json(&paths),
+        Err(e) => {
+            log::error!("Error gathering profiles: {e}");
+            vec![]
+        }
+    }
+}
+
 /// Turns instance.json into Instance struct
-pub fn parse_profile_paths_to_json(instance_json_paths: &[PathBuf]) -> Vec<Profile> {
+fn parse_profile_paths_to_json(instance_json_paths: &[PathBuf]) -> Vec<Profile> {
     instance_json_paths
         .iter()
         .map(|ins_path| std::fs::read_to_string(ins_path).map(|str| (str, ins_path.clone())))
@@ -37,7 +50,7 @@ pub fn parse_profile_paths_to_json(instance_json_paths: &[PathBuf]) -> Vec<Profi
 }
 
 /// Returns an owned iterator of paths to the instance.json of each instance
-pub fn collect_profile_json_paths(profiles_dir: &std::path::Path) -> std::io::Result<Vec<PathBuf>> {
+fn collect_profile_json_paths(profiles_dir: &std::path::Path) -> std::io::Result<Vec<PathBuf>> {
     let instances = profiles_dir
         .read_dir()?
         .filter_map(Result::ok)
@@ -47,4 +60,35 @@ pub fn collect_profile_json_paths(profiles_dir: &std::path::Path) -> std::io::Re
         .filter(|path| path.is_file())
         .collect();
     Ok(instances)
+}
+
+pub async fn write_profile_then_find_list(p: Profile, profiles_directory: std::path::PathBuf) -> Vec<Profile> {
+    if let Err(e) = write_profile(p).await {
+        log::error!("Error while writing profile to disk: {e}");
+    }
+    find_profiles(profiles_directory).await
+}
+
+async fn write_profile(p: Profile) -> std::io::Result<()> {
+    tokio::fs::create_dir_all(&p.path).await?;
+    let instance_data = serde_json::to_vec(&p.profile_json)?;
+    tokio::fs::write(p.path.join(PROFILE_JSON_NAME), instance_data).await?;
+    Ok(())
+}
+
+pub async fn create_profile_then_find_list(p: ProfileJson, profiles_directory: std::path::PathBuf) -> Vec<Profile> {
+    let profile_path = find_valid_profile_path(&p.name, &profiles_directory).await;
+    let p = Profile { path: profile_path, profile_json: p };
+    write_profile_then_find_list(p, profiles_directory).await
+}
+
+async fn find_valid_profile_path(name: &str, profiles_directory: &std::path::Path) -> PathBuf {
+    let filtered_name = name.replace([' ', '-', '\\', '/'], "_");
+    let mut path = profiles_directory.join(&filtered_name);
+    let mut i: usize = 0;
+    while path.exists() {
+        path = profiles_directory.join(format!("{}_{}", &filtered_name, i));
+        i += 1;
+    }
+    path
 }

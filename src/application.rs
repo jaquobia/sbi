@@ -134,61 +134,64 @@ impl Application {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::FetchedProfiles(profiles) => {
-                println!("Fetched profiles using async tasks! ({})", profiles.len());
+                log::info!("Fetched profiles using async tasks! ({})", profiles.len());
                 self.profiles = profiles;
                 // Remove selected profile. There's no gurantee the previously selected profile
                 // will be in the same place nor still exist after a fetch.
                 // Unlike a tui environment, the user can just easily
                 // re-select a profile.
                 self.selected_profile = None;
-                // TODO: This may be deleted
-                self.submenu = None;
                 Task::none()
             }
             Message::CreateProfile => {
                 if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_ref() {
-                    match t {
+                    let profile = match t {
                         NewProfileType::Empty { name } => {
-                            println!("Creating new empty profile - {name}");
+                            log::info!("Creating new empty profile - {name}");
                             // Make a new profile with just a name
+                            crate::json::ProfileJson { name: name.clone(), additional_assets: None, collection_id: None }
                         }
-                    }
+                    };
+
+                    self.submenu = None;
+                    let profiles_dir = self.profiles_directory();
+                    Task::perform(crate::profile::create_profile_then_find_list(profile, profiles_dir), Message::FetchedProfiles)
+                } else {
+                    log::error!("Tried to create a profile while not in a create-profile screen!");
+                    Task::none()
                 }
-                self.submenu = None;
-                let profiles_dir = self.profiles_directory();
-                Task::perform(Self::find_profiles(profiles_dir), Message::FetchedProfiles)
             }
             Message::ToggleDebug(state) => {
-                println!("Toggling debug: {}", state);
+                log::info!("Toggling debug: {}", state);
                 self.debug = state;
                 Task::none()
             }
             Message::SelectExecutable(executable) => {
-                println!("Selecting executable: {}", executable);
+                log::info!("Selecting executable: {}", executable);
                 self.executable_selection = Some(executable);
                 Task::none()
             }
             Message::ButtonSettingsPressed => {
-                println!("Settings was pressed");
+                log::info!("Settings was pressed");
                 self.submenu = Some(SubMenu::ConfigureProfile);
                 Task::none()
             }
             Message::ButtonExitSubmenuPressed => {
-                println!("Back...");
+                log::info!("Back...");
                 self.submenu = None;
                 Task::none()
             }
             Message::ButtonLaunchPressed => {
-                println!("Launching starbound...");
+                log::info!("Launching starbound...");
                 Task::none()
             }
             Message::ButtonNewProfilePressed => {
-                println!("New profile pressed...");
+                log::info!("New profile pressed...");
                 self.submenu = Some(SubMenu::NewProfile(None));
                 Task::none()
             }
             Message::ButtonNewProfileEmptyPressed => {
-                println!("New profile empty");
+                log::info!("New profile empty");
                 self.submenu = Some(SubMenu::NewProfile(Some(NewProfileType::Empty {
                     name: String::from(""),
                 })));
@@ -197,11 +200,11 @@ impl Application {
             Message::SelectProfile(i) => {
                 match self.profiles.get(i) {
                     Some(name) => {
-                        println!("Selecting profile {} - {:?}", i, name);
+                        log::info!("Selecting profile {} - {:?}", i, name);
                         self.selected_profile = Some(i);
                     }
                     None => {
-                        eprintln!("Selected profile {i} is out of bounds of the profile list of length {}!", self.profiles.len());
+                        log::error!("Selected profile {i} is out of bounds of the profile list of length {}!", self.profiles.len());
                     }
                 }
                 Task::none()
@@ -210,7 +213,7 @@ impl Application {
                 if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_mut() {
                     t.update(m)
                 } else {
-                    eprintln!("Error: Tried to send a NewProfile message while not in a valid NewProfile submenu");
+                    log::error!("Error: Tried to send a NewProfile message while not in a valid NewProfile submenu");
                     Task::none()
                 }
             }
@@ -219,19 +222,6 @@ impl Application {
 
     pub fn profiles_directory(&self) -> PathBuf {
         self.directories.data_dir().join("profiles")
-    }
-
-    /// Returns a collection of all valid profiles in the profiles directory.
-    /// A valid profile consists of a folder in the profiles directory which contains a valid json.
-    pub async fn find_profiles(profiles_directory: std::path::PathBuf) -> Vec<Profile> {
-        let paths = crate::profile::collect_profile_json_paths(&profiles_directory);
-        match paths {
-            Ok(paths) => crate::profile::parse_profile_paths_to_json(&paths),
-            Err(e) => {
-                eprintln!("Error gathering profiles: {e}");
-                vec![]
-            }
-        }
     }
 
     pub fn theme(&self) -> iced::Theme {

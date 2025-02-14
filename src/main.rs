@@ -1,6 +1,3 @@
-// use std::sync::LazyLock;
-
-// use anyhow::Result;
 use application::{Application, Message};
 use directories::ProjectDirs;
 use flexi_logger::{FileSpec, FlexiLoggerError};
@@ -45,12 +42,12 @@ fn main() -> Result<(), SBIInitializationError> {
 
     // let cli_args: CliArgs = clap::Parser::try_parse()?;
     let _log_handle = flexi_logger::Logger::try_with_env_or_str("info")?
-        .log_to_file(
-            FileSpec::default()
-                .directory(proj_dirs.data_dir())
-                .basename("sbi")
-                .suppress_timestamp(),
-        )
+        // .log_to_file(
+        //     FileSpec::default()
+        //         .directory(proj_dirs.data_dir())
+        //         .basename("sbi")
+        //         .suppress_timestamp(),
+        // )
         .start()?;
 
     let application = Application::new(proj_dirs);
@@ -61,7 +58,7 @@ fn main() -> Result<(), SBIInitializationError> {
             (
                 application,
                 Task::perform(
-                    Application::find_profiles(profiles_dir),
+                    profile::find_profiles(profiles_dir),
                     Message::FetchedProfiles,
                 ),
             )
