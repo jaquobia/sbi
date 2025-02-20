@@ -5,6 +5,7 @@ use iced::Task;
 
 mod application;
 mod cli_args;
+mod executable;
 // mod core;
 mod game_launcher;
 mod json;

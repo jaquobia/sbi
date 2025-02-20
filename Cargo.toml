@@ -42,3 +42,6 @@ reqwest = { version = "0.12", features = ["json"] }
 # Logging
 log = "0.4"
 flexi_logger = "0.29"
+
+# Steam APIs
+# steamlocate = "2.0.1"

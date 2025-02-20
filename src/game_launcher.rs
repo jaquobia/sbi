@@ -7,16 +7,7 @@ use crate::{STARBOUND_BOOT_CONFIG_NAME, STARBOUND_STEAM_ID};
 
 const OS_LD_LIBRARY_NAME: &str = "LD_LIBRARY_PATH";
 
-pub fn launch_default(default_launch_command: Vec<String>) -> Result<()> {
-    if let [command_path, args @ ..] = default_launch_command.as_slice() {
-        let mut command = tokio::process::Command::new(command_path);
-        command.args(args);
-        tokio::task::spawn(async move { command.spawn()?.wait().await });
-    }
-    Ok(())
-}
-
-pub fn launch_instance_cli(executable_path: &Path, instance_dir: &Path, maybe_extra_ld_path: Option<&Path>) -> Result<()> {
+pub fn launch_game(executable_path: &Path, instance_dir: &Path, maybe_extra_ld_path: Option<&Path>) -> Result<()> {
 
     let mut ld_paths = vec![];
     if let Some(extra_ld_path) = maybe_extra_ld_path {
@@ -51,19 +42,5 @@ pub fn launch_instance_cli(executable_path: &Path, instance_dir: &Path, maybe_ex
     // but this also causes no harm
     command.stdout(Stdio::null()).stderr(Stdio::null());                                                          
     tokio::task::spawn(async move { command.spawn()?.wait().await });
-    Ok(())
-}
-
-
-pub fn launch_instance_steam(boot_config: Option<&Path>) -> Result<()> {
-    let mut command = tokio::process::Command::new("steam");
-    command.args(["-applaunch", STARBOUND_STEAM_ID]);
-    if let Some(boot_config) = boot_config {
-        command.arg("-bootconfig"); 
-        command.arg(boot_config); 
-    }
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command.spawn()?;
-    tokio::task::spawn(async move { child.wait().await });
     Ok(())
 }
