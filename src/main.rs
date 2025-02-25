@@ -7,8 +7,8 @@ mod application;
 mod cli_args;
 mod executable;
 // mod core;
+mod config;
 mod game_launcher;
-mod json;
 mod mod_manifest;
 mod profile;
 // mod workshop_downloader;
@@ -53,6 +53,7 @@ fn main() -> Result<(), SBIInitializationError> {
 
     let application = Application::new(proj_dirs);
     let profiles_dir = application.profiles_directory();
+    let data_dir = application.data_directory();
     iced::application("SBI", Application::update, Application::view)
         .theme(Application::theme)
         .run_with(move || {
@@ -61,71 +62,12 @@ fn main() -> Result<(), SBIInitializationError> {
                 Task::perform(
                     profile::find_profiles(profiles_dir),
                     Message::FetchedProfiles,
-                ),
+                )
+                .chain(Task::perform(
+                    config::load_config(data_dir),
+                    Message::FetchConfig,
+                )),
             )
         })?;
     Ok(())
-
-    // if cli_args.query {
-    //     // flexi_logger::Logger::try_with_env_or_str("info")?.start()?;
-    //     let name = get_pipe_name()?;
-    //     match interprocess::local_socket::tokio::Stream::connect(name).await {
-    //         Ok(local_socket) => {
-    //             connect_to_existing_sbi_service(local_socket).await?;
-    //         },
-    //         Err(_) => {
-    //             warn!("Could not connect to sbi client!");
-    //             if let Some(default_command) = cli_args.default_command {
-    //                 info!("Attempting to launch game through default command: {:?}", default_command);
-    //                 game_launcher::launch_default(default_command)?;
-    //             }
-    //             // Here, sbi closes quietly due to no fall-backs
-    //         }
-    //
-    //     }
-    //     return Ok(());
-    // }
-    //
-    // AppSBI::run(proj_dirs).await
-    // if let Some(default_command) = cli_args.default_command {
-    //     info!("Attempting to launch game through default command: {:?}", default_command);
-    //     // game_launcher::launch_default(default_command)?;
-    // }
-    // const OS_LD_LIBRARY_NAME: &str = "LD_LIBRARY_PATH";
-    //
-    // let exec = "/home/jaquobia/steamapps/common/Starbound/linux/starbound";
-    // let instance = "/home/jaquobia/steamapps/common/Starbound/";
-    // let maybe_extra_ld_path: Option<std::path::PathBuf> = Some(std::path::PathBuf::from("/home/jaquobia/steamapps/common/Starbound/linux/"));
-    //
-    // let mut ld_paths = vec![];
-    // if let Some(extra_ld_path) = maybe_extra_ld_path {
-    //     ld_paths.push(extra_ld_path.to_path_buf());
-    // }
-    // if let Ok(system_ld_path) = std::env::var(OS_LD_LIBRARY_NAME) {
-    //     ld_paths.extend(std::env::split_paths(&system_ld_path).map(std::path::PathBuf::from));
-    // };
-    // let new_ld_path_var = std::env::join_paths(ld_paths)?;
-    //
-    // info!(
-    //     "Launching {} with ld_path: {:?}",
-    //     exec,
-    //     new_ld_path_var
-    // );
-    //
-    // let mut command = tokio::process::Command::new(exec);
-    // command.current_dir(instance);
-    // let bootconfig = std::path::PathBuf::from(instance)
-    //     .join(STARBOUND_BOOT_CONFIG_NAME)
-    //     .display()
-    //     .to_string();
-    // command.env(OS_LD_LIBRARY_NAME, new_ld_path_var);
-    // // command.args(["-bootconfig", &bootconfig]);
-    //
-    // command.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-    // // tokio::task::spawn(async move {
-    //     let exit = command.spawn()?.wait().await?;
-    //     info!("{exit}");
-    // //     let ret: Result<()> = Ok(());
-    // //     ret
-    // // }).await??;
 }

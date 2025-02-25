@@ -1,6 +1,15 @@
 use std::path::PathBuf;
 
-use crate::{json::ProfileJson, PROFILE_JSON_NAME};
+use serde::{Deserialize, Serialize};
+
+use crate::PROFILE_JSON_NAME;
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ProfileJson {
+    pub name: String,
+    pub additional_assets: Option<Vec<String>>,
+    pub collection_id: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Profile {

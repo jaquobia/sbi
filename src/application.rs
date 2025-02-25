@@ -9,28 +9,8 @@ use iced::{
     Task,
 };
 
-use crate::profile::Profile;
+use crate::{config::SBIConfig, executable::Executable, profile::Profile};
 
-// Executables
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Executable {
-    XStarbound,
-    OpenStarbound,
-}
-
-impl Executable {
-    const ALL: [Executable; 2] = [Executable::OpenStarbound, Executable::XStarbound];
-}
-
-impl std::fmt::Display for Executable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Executable::XStarbound => "XStarbound",
-            Executable::OpenStarbound => "OpenStarbound",
-        })
-    }
-}
 
 // New Profile Submenu
 
@@ -96,20 +76,11 @@ enum SubMenu {
 }
 
 #[derive(Debug, Clone)]
-pub struct Application {
-    directories: ProjectDirs,
-    profiles: Vec<Profile>,
-    debug: bool,
-    submenu: Option<SubMenu>,
-    executable_selection: Option<Executable>,
-    selected_profile: Option<usize>,
-}
-
-#[derive(Debug, Clone)]
 pub enum Message {
     FetchedProfiles(Vec<Profile>),
+    FetchConfig(SBIConfig),
     CreateProfile,
-    SelectExecutable(Executable),
+    SelectExecutable(String),
     ButtonSettingsPressed,
     ButtonLaunchPressed,
     ButtonExitSubmenuPressed,
@@ -117,17 +88,31 @@ pub enum Message {
     ButtonNewProfileEmptyPressed,
     ToggleDebug(bool),
     SelectProfile(usize),
+    #[allow(clippy::enum_variant_names)]
     NewProfileMessage(NewProfileSubmenuMessage),
+}
+
+#[derive(Debug, Clone)]
+pub struct Application {
+    directories: ProjectDirs,
+    profiles: Vec<Profile>,
+    executables: rustc_hash::FxHashMap<String, Executable>,
+    debug: bool,
+    submenu: Option<SubMenu>,
+    selected_executable: Option<String>,
+    selected_profile: Option<usize>,
 }
 
 impl Application {
     pub fn new(directories: ProjectDirs) -> Self {
+        let executables = rustc_hash::FxHashMap::default();
         Self {
             directories,
             profiles: vec![],
+            executables,
             debug: false,
             submenu: None,
-            executable_selection: None,
+            selected_executable: None,
             selected_profile: None,
         }
     }
@@ -142,14 +127,18 @@ impl Application {
                 // re-select a profile.
                 self.selected_profile = None;
                 Task::none()
-            }
+            },
+            Message::FetchConfig(config) => {
+                self.executables = config.executables;
+                Task::none()
+            },
             Message::CreateProfile => {
                 if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_ref() {
                     let profile = match t {
                         NewProfileType::Empty { name } => {
                             log::info!("Creating new empty profile - {name}");
                             // Make a new profile with just a name
-                            crate::json::ProfileJson { name: name.clone(), additional_assets: None, collection_id: None }
+                            crate::profile::ProfileJson { name: name.clone(), additional_assets: None, collection_id: None }
                         }
                     };
 
@@ -168,7 +157,7 @@ impl Application {
             }
             Message::SelectExecutable(executable) => {
                 log::info!("Selecting executable: {}", executable);
-                self.executable_selection = Some(executable);
+                self.selected_executable = Some(executable);
                 Task::none()
             }
             Message::ButtonSettingsPressed => {
@@ -220,6 +209,10 @@ impl Application {
         }
     }
 
+    pub fn data_directory(&self) -> PathBuf {
+        self.directories.data_dir().to_path_buf()
+    }
+
     pub fn profiles_directory(&self) -> PathBuf {
         self.directories.data_dir().join("profiles")
     }
@@ -241,12 +234,13 @@ impl Application {
 
         let launch_button_message = self
             .selected_profile
-            .and(self.executable_selection)
+            .and(self.selected_executable.as_ref())
             .map(|_p_i| Message::ButtonLaunchPressed);
         let launch_button = iced::widget::button("Launch").on_press_maybe(launch_button_message);
+        let executables = Vec::from_iter(self.executables.keys().cloned());
         let executable_picker = iced::widget::pick_list(
-            Executable::ALL,
-            self.executable_selection.as_ref(),
+            executables,
+            self.selected_executable.clone(),
             Message::SelectExecutable,
         )
         .placeholder("Select an executable...");

@@ -1,9 +1,8 @@
 use std::{path::{Path, PathBuf}, process::Stdio};
 
 use anyhow::Result;
-use log::info;
 
-use crate::{STARBOUND_BOOT_CONFIG_NAME, STARBOUND_STEAM_ID};
+use crate::STARBOUND_BOOT_CONFIG_NAME;
 
 const OS_LD_LIBRARY_NAME: &str = "LD_LIBRARY_PATH";
 
@@ -18,7 +17,7 @@ pub fn launch_game(executable_path: &Path, instance_dir: &Path, maybe_extra_ld_p
     };
     let new_ld_path_var = std::env::join_paths(ld_paths)?;
 
-    info!(
+    log::info!(
         "Launching {} with ld_path: {:?}",
         executable_path.display(),
         new_ld_path_var
