@@ -1,17 +1,19 @@
+use std::{
+    env::VarError,
+    path::{Path, PathBuf},
+};
+
 use application::{Application, Message};
 use directories::ProjectDirs;
-use flexi_logger::{FileSpec, FlexiLoggerError};
 use iced::Task;
 
 mod application;
 mod cli_args;
-mod executable;
-// mod core;
 mod config;
+mod executable;
 mod game_launcher;
 mod mod_manifest;
 mod profile;
-// mod workshop_downloader;
 
 static ORGANIZATION_QUALIFIER: &str = "";
 static ORGANIZATION_NAME: &str = "";
@@ -31,42 +33,89 @@ enum SBIInitializationError {
     #[error("Could not find the relevant folders to store application data in")]
     NoProjectDirectories,
     #[error("...")]
-    LoggerFailure(#[from] FlexiLoggerError),
+    LoggerFailure(#[from] flexi_logger::FlexiLoggerError),
     #[error("...")]
     IcedApplicationError(#[from] iced::Error),
 }
 
-fn main() -> Result<(), SBIInitializationError> {
-    /*TODO: Introduce Environment Variables for application storage location*/
-    let proj_dirs = ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME)
-        .ok_or(SBIInitializationError::NoProjectDirectories)?;
+#[derive(Debug, Clone)]
+struct SBIDirectories {
+    data_directory: PathBuf,
+    profiles_directory: PathBuf,
+}
 
-    // let cli_args: CliArgs = clap::Parser::try_parse()?;
+impl SBIDirectories {
+    fn new() -> Result<Self, SBIInitializationError> {
+        let proj_dirs =
+            ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME)
+                .ok_or(SBIInitializationError::NoProjectDirectories)?;
+
+        let data_dir = match std::env::var("SBI_DATA_DIR") {
+            Err(e) => {
+                if let VarError::NotUnicode(s) = e {
+                    log::error!(
+                        "SBI_DATA_DIR exists but contains non-unicode characters: {}",
+                        s.to_string_lossy()
+                    );
+                }
+                None
+            }
+            Ok(d) => Some(PathBuf::from(d)),
+        }
+        .unwrap_or_else(|| proj_dirs.data_dir().to_path_buf());
+
+        let profiles_dir = data_dir.join("profiles");
+
+        Ok(Self {
+            data_directory: data_dir,
+            profiles_directory: profiles_dir,
+        })
+    }
+
+    pub fn data(&self) -> &Path {
+        &self.data_directory
+    }
+
+    pub fn profiles(&self) -> &Path {
+        &self.profiles_directory
+    }
+}
+
+fn main() -> Result<(), SBIInitializationError> {
     let _log_handle = flexi_logger::Logger::try_with_env_or_str("info")?
         // .log_to_file(
-        //     FileSpec::default()
-        //         .directory(proj_dirs.data_dir())
+        //     flexi_logger::FileSpec::default()
+        //         .directory(&data_dir)
         //         .basename("sbi")
         //         .suppress_timestamp(),
         // )
         .start()?;
 
-    let application = Application::new(proj_dirs);
-    let profiles_dir = application.profiles_directory();
-    let data_dir = application.data_directory();
+    let dirs = SBIDirectories::new()?;
+
+    if !dirs.data().exists() {
+        if let Err(e) = std::fs::create_dir_all(dirs.data()) {
+            log::error!("Data directory does not exist and could not be created: {e}");
+        }
+    }
+
+    // let cli_args: CliArgs = clap::Parser::try_parse()?;
+
+    let application = Application::new(dirs);
+    let profiles_dir = application.dirs().profiles().to_path_buf();
+    let data_dir = application.dirs().data().to_path_buf();
     iced::application("SBI", Application::update, Application::view)
         .theme(Application::theme)
         .run_with(move || {
             (
                 application,
-                Task::perform(
-                    profile::find_profiles(profiles_dir),
-                    Message::FetchedProfiles,
-                )
-                .chain(Task::perform(
-                    config::load_config(data_dir),
-                    Message::FetchConfig,
-                )),
+                Task::batch([
+                    Task::perform(
+                        profile::find_profiles(profiles_dir),
+                        Message::FetchedProfiles,
+                    ),
+                    Task::perform(config::load_config(data_dir), Message::FetchConfig),
+                ]),
             )
         })?;
     Ok(())

@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-
-use directories::ProjectDirs;
 use iced::{
     alignment::Vertical,
     widget::container,
@@ -9,7 +6,7 @@ use iced::{
     Task,
 };
 
-use crate::{config::SBIConfig, executable::Executable, profile::Profile};
+use crate::{config::SBIConfig, executable::Executable, profile::Profile, SBIDirectories};
 
 
 // New Profile Submenu
@@ -94,7 +91,7 @@ pub enum Message {
 
 #[derive(Debug, Clone)]
 pub struct Application {
-    directories: ProjectDirs,
+    dirs: SBIDirectories,
     profiles: Vec<Profile>,
     executables: rustc_hash::FxHashMap<String, Executable>,
     debug: bool,
@@ -104,10 +101,10 @@ pub struct Application {
 }
 
 impl Application {
-    pub fn new(directories: ProjectDirs) -> Self {
+    pub fn new(dirs: SBIDirectories) -> Self {
         let executables = rustc_hash::FxHashMap::default();
         Self {
-            directories,
+            dirs,
             profiles: vec![],
             executables,
             debug: false,
@@ -143,7 +140,7 @@ impl Application {
                     };
 
                     self.submenu = None;
-                    let profiles_dir = self.profiles_directory();
+                    let profiles_dir = self.dirs().profiles().to_path_buf();
                     Task::perform(crate::profile::create_profile_then_find_list(profile, profiles_dir), Message::FetchedProfiles)
                 } else {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
@@ -171,7 +168,9 @@ impl Application {
                 Task::none()
             }
             Message::ButtonLaunchPressed => {
-                log::info!("Launching starbound...");
+                let profile = self.selected_profile.and_then(|p|self.profiles.get(p)).expect("No profile selected?!");
+                let executable = self.selected_executable.as_ref().expect("No executable selected?!");
+                log::info!("Launching {} with {:?}", profile.name(), executable);
                 Task::none()
             }
             Message::ButtonNewProfilePressed => {
@@ -209,12 +208,8 @@ impl Application {
         }
     }
 
-    pub fn data_directory(&self) -> PathBuf {
-        self.directories.data_dir().to_path_buf()
-    }
-
-    pub fn profiles_directory(&self) -> PathBuf {
-        self.directories.data_dir().join("profiles")
+    pub fn dirs(&self) -> &SBIDirectories {
+        &self.dirs
     }
 
     pub fn theme(&self) -> iced::Theme {
