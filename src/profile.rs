@@ -7,7 +7,7 @@ use crate::PROFILE_JSON_NAME;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProfileJson {
     pub name: String,
-    pub additional_assets: Option<Vec<String>>,
+    pub additional_assets: Option<Vec<PathBuf>>,
     pub collection_id: Option<String>,
 }
 
@@ -37,8 +37,8 @@ impl Profile {
         &self.path
     }
 
-    pub fn folder_path(&self) -> PathBuf {
-        self.path.parent().expect("Existing profile does not have a parent folder??").to_path_buf()
+    pub fn additional_assets<'a>(&'a self) -> impl Iterator<Item=&'a PathBuf> {
+        self.profile_json.additional_assets.iter().flatten()
     }
 }
 

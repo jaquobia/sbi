@@ -17,6 +17,7 @@ pub async fn write_init_config(executable: &Executable, profile: &Profile, vanil
     log::info!("Vanilla assets dir: {}", vanilla_assets.display());
     let mut asset_directories: Vec<PathBuf> = vec![vanilla_assets];
     asset_directories.extend(executable.assets());
+    asset_directories.extend(profile.additional_assets().cloned());
     let storage_directory = profile.json_path();
 
     // TODO: Find a way to either configure these or determine a reasonable default
