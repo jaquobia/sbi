@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +31,14 @@ impl Profile {
 
     pub fn name(&self) -> &str {
         &self.profile_json.name
+    }
+
+    pub fn json_path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn folder_path(&self) -> PathBuf {
+        self.path.parent().expect("Existing profile does not have a parent folder??").to_path_buf()
     }
 }
 

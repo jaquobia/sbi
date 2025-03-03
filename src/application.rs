@@ -6,7 +6,7 @@ use iced::{
     Task,
 };
 
-use crate::{config::SBIConfig, executable::Executable, profile::Profile, SBIDirectories};
+use crate::{config::SBIConfig, executable::Executable, game_launcher::{self, SBILaunchStatus}, profile::Profile, SBIDirectories};
 
 
 // New Profile Submenu
@@ -75,7 +75,8 @@ enum SubMenu {
 #[derive(Debug, Clone)]
 pub enum Message {
     FetchedProfiles(Vec<Profile>),
-    FetchConfig(SBIConfig),
+    FetchedConfig(SBIConfig),
+    LaunchedGame(SBILaunchStatus),
     CreateProfile,
     SelectExecutable(String),
     ButtonSettingsPressed,
@@ -125,8 +126,12 @@ impl Application {
                 self.selected_profile = None;
                 Task::none()
             },
-            Message::FetchConfig(config) => {
+            Message::FetchedConfig(config) => {
                 self.executables = config.executables;
+                Task::none()
+            },
+            Message::LaunchedGame(status) => {
+                log::info!("Launched Game: {status:?}");
                 Task::none()
             },
             Message::CreateProfile => {
@@ -168,10 +173,12 @@ impl Application {
                 Task::none()
             }
             Message::ButtonLaunchPressed => {
-                let profile = self.selected_profile.and_then(|p|self.profiles.get(p)).expect("No profile selected?!");
-                let executable = self.selected_executable.as_ref().expect("No executable selected?!");
+                let profile = self.selected_profile.and_then(|p|self.profiles.get(p)).cloned().expect("No profile selected?!");
+                let executable = self.selected_executable.as_ref().cloned().expect("No executable selected?!");
+                let vanilla_assets = self.dirs().vanilla_assets().to_path_buf();
                 log::info!("Launching {} with {:?}", profile.name(), executable);
-                Task::none()
+                let executable = self.executables.get(&executable).cloned().expect("No executable matching name?!");
+                Task::perform(game_launcher::launch_game(executable, profile, vanilla_assets), Message::LaunchedGame)
             }
             Message::ButtonNewProfilePressed => {
                 log::info!("New profile pressed...");

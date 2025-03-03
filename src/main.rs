@@ -36,12 +36,15 @@ enum SBIInitializationError {
     LoggerFailure(#[from] flexi_logger::FlexiLoggerError),
     #[error("...")]
     IcedApplicationError(#[from] iced::Error),
+    #[error("No vanilla assets directory! Please launch the game through steam with `sbi -- %command%` or directly with `SBI_VANILLA_ASSETS_DIR=some/path/ sbi`. SBI_VANILLA_ASSETS will take priority over the arguments.")]
+    NoVanillaAssets
 }
 
 #[derive(Debug, Clone)]
 struct SBIDirectories {
     data_directory: PathBuf,
     profiles_directory: PathBuf,
+    vanilla_assets: PathBuf,
 }
 
 impl SBIDirectories {
@@ -66,9 +69,13 @@ impl SBIDirectories {
 
         let profiles_dir = data_dir.join("profiles");
 
+        let vanilla_assets = std::env::var("SBI_VANILLA_ASSETS_DIR").map_err(|_| SBIInitializationError::NoVanillaAssets)?;
+        let vanilla_assets = PathBuf::from(vanilla_assets);
+
         Ok(Self {
             data_directory: data_dir,
             profiles_directory: profiles_dir,
+            vanilla_assets,
         })
     }
 
@@ -78,6 +85,10 @@ impl SBIDirectories {
 
     pub fn profiles(&self) -> &Path {
         &self.profiles_directory
+    }
+
+    pub fn vanilla_assets(&self) -> &Path {
+        &self.vanilla_assets
     }
 }
 
@@ -114,7 +125,7 @@ fn main() -> Result<(), SBIInitializationError> {
                         profile::find_profiles(profiles_dir),
                         Message::FetchedProfiles,
                     ),
-                    Task::perform(config::load_config(data_dir), Message::FetchConfig),
+                    Task::perform(config::load_config(data_dir), Message::FetchedConfig),
                 ]),
             )
         })?;
