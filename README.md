@@ -7,8 +7,8 @@ Sbi is built with unix paths and environments in mind and therefore is not guara
 Sbi is in a very experimental state, so stability is not guaranteed and the folder, path, or json structures can change on any commit.  
 
 # Planned Features
-- [ ] Linking the vanilla starbound universe to a profile
-- [ ] Determine plausible locations of the vanilla assets from the `%command%` parameter
+- [x] Linking the vanilla starbound universe to a profile
+- [x] Determine plausible locations of the vanilla assets from the `%command%` parameter
 - [x] Reading executables from disk
 - [ ] Downloading and Updating executables for oSB and xSB from their respective repositories
 - [ ] Workshop and Collection support
