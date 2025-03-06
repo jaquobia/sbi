@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use iced::{
     alignment::Vertical,
     widget::container,
@@ -146,7 +148,8 @@ impl Application {
 
                     self.submenu = None;
                     let profiles_dir = self.dirs().profiles().to_path_buf();
-                    Task::perform(crate::profile::create_profile_then_find_list(profile, profiles_dir), Message::FetchedProfiles)
+                    let maybe_vanilla_profile_dir = self.dirs().vanilla_storage().map(PathBuf::from);
+                    Task::perform(crate::profile::create_profile_then_find_list(profile, profiles_dir, maybe_vanilla_profile_dir), Message::FetchedProfiles)
                 } else {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
                     Task::none()
@@ -227,6 +230,8 @@ impl Application {
         // Bottom Bar
         let configure_profile_buttton_message = self
             .selected_profile
+            .and_then(|p_i| self.profiles.get(p_i))
+            .filter(|p| !p.is_vanilla() )
             .map(|_p_i| Message::ButtonSettingsPressed);
         let settings_button = iced::widget::button("Configure Profile")
             .on_press_maybe(configure_profile_buttton_message);

@@ -69,6 +69,7 @@ struct SBIDirectories {
     data_directory: PathBuf,
     profiles_directory: PathBuf,
     vanilla_assets: PathBuf,
+    vanilla_storage: Option<PathBuf>,
 }
 
 impl SBIDirectories {
@@ -105,7 +106,7 @@ impl SBIDirectories {
         let vanilla_assets = {
             let vanilla_assets_source_cli = cli.assets;
             let vanilla_assets_source_env = parse_path_from_env("SBI_VANILLA_ASSETS_DIR");
-            let vanilla_assets_source_steam = starbound_steam_dir.map(|d|d.join("assets"));
+            let vanilla_assets_source_steam = starbound_steam_dir.as_ref().map(|d|d.join("assets"));
 
             vanilla_assets_source_cli
                 .or(vanilla_assets_source_env)
@@ -113,10 +114,13 @@ impl SBIDirectories {
                 .ok_or(SBIInitializationError::NoVanillaAssets)?
         };
 
+        let vanilla_storage = starbound_steam_dir.map(|d|d.join("storage"));
+
         Ok(Self {
             data_directory: data_dir,
             profiles_directory: profiles_dir,
             vanilla_assets,
+            vanilla_storage,
         })
     }
 
@@ -130,6 +134,10 @@ impl SBIDirectories {
 
     pub fn vanilla_assets(&self) -> &Path {
         &self.vanilla_assets
+    }
+
+    pub fn vanilla_storage(&self) -> Option<&Path> {
+        self.vanilla_storage.as_deref()
     }
 }
 
@@ -157,6 +165,7 @@ fn main() -> Result<(), SBIInitializationError> {
 
     let application = Application::new(dirs);
     let profiles_dir = application.dirs().profiles().to_path_buf();
+    let vanilla_profile_dir = application.dirs().vanilla_storage().map(PathBuf::from);
     let data_dir = application.dirs().data().to_path_buf();
     iced::application("SBI", Application::update, Application::view)
         .theme(Application::theme)
@@ -165,7 +174,7 @@ fn main() -> Result<(), SBIInitializationError> {
                 application,
                 Task::batch([
                     Task::perform(
-                        profile::find_profiles(profiles_dir),
+                        profile::find_profiles(profiles_dir, vanilla_profile_dir),
                         Message::FetchedProfiles,
                     ),
                     Task::perform(config::load_config(data_dir), Message::FetchedConfig),

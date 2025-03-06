@@ -13,12 +13,12 @@ pub enum SBILaunchStatus {
 }
 
 pub async fn write_init_config(executable: &Executable, profile: &Profile, vanilla_assets: PathBuf) -> anyhow::Result<()> {
-    let config_path = profile.json_path().join(STARBOUND_BOOT_CONFIG_NAME);
+    let config_path = profile.path().join(STARBOUND_BOOT_CONFIG_NAME);
     log::info!("Vanilla assets dir: {}", vanilla_assets.display());
     let mut asset_directories: Vec<PathBuf> = vec![vanilla_assets];
     asset_directories.extend(executable.assets());
-    asset_directories.extend(profile.additional_assets().cloned());
-    let storage_directory = profile.json_path();
+    asset_directories.extend(profile.additional_assets());
+    let storage_directory = profile.path();
 
     // TODO: Find a way to either configure these or determine a reasonable default
     let allow_admin_commands_from_anyone: bool = false;
@@ -45,7 +45,7 @@ pub async fn write_init_config(executable: &Executable, profile: &Profile, vanil
 async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::Result<()> {
     let executable_path = executable.bin;
     let executable_folder = executable_path.parent().expect("").to_path_buf();
-    let instance_dir = profile.json_path();
+    let instance_dir = profile.path();
 
     let new_ld_path_var = 
     {
