@@ -24,11 +24,11 @@ static APPLICATION_NAME: &str = "sbi";
 static PROFILE_JSON_NAME: &str = "profile.json";
 static SBI_CONFIG_JSON_NAME: &str = "config.json";
 
-static STARBOUND_STEAM_ID: &str = "211820";
+static STARBOUND_STEAM_ID: u32 = 211820;
 static STARBOUND_BOOT_CONFIG_NAME: &str = "sbinit.config";
 
-static LOCAL_PIPE_NAME: &str = "@SBI_PIPE_NAME";
-static LOCAL_PIPE_FS_NAME: &str = "/tmp/@SBI_PIPE_NAME";
+// static LOCAL_PIPE_NAME: &str = "@SBI_PIPE_NAME";
+// static LOCAL_PIPE_FS_NAME: &str = "/tmp/@SBI_PIPE_NAME";
 
 #[derive(Debug, thiserror::Error)]
 enum SBIInitializationError {
@@ -44,10 +44,9 @@ enum SBIInitializationError {
     ClapFailedToParseCLI(#[from] clap::Error),
 }
 
-
 /// Reads an environment variable and returns the value as a PathBuf, or None if parsing failed.
 /// If parsing the variable leads to a NotUnicode error, a relevant error message will also be printed.
-fn parse_path_from_env(variable: &str) -> Option<PathBuf> {
+pub fn parse_path_from_env(variable: &str) -> Option<PathBuf> {
     match std::env::var(variable) {
         Err(e) => {
             // If it is a Unicode error, then the variable exists but we can't read it. Report it
@@ -60,7 +59,7 @@ fn parse_path_from_env(variable: &str) -> Option<PathBuf> {
             }
             // Else, the variable does not exist and the user did not intend set a value.
             None
-        },
+        }
         Ok(d) => Some(PathBuf::from(d)),
     }
 }
@@ -79,14 +78,39 @@ impl SBIDirectories {
                 .ok_or(SBIInitializationError::NoProjectDirectories)?;
 
         let data_dir = parse_path_from_env("SBI_DATA_DIR")
-        .unwrap_or_else(|| default_proj_dirs.data_dir().to_path_buf());
+            .unwrap_or_else(|| default_proj_dirs.data_dir().to_path_buf());
 
         let profiles_dir = data_dir.join("profiles");
+
+        let starbound_steam_dir = match steamlocate::SteamDir::locate() {
+            Err(e) => {
+                log::error!("Error while parsing steam installtion: {e}");
+                None
+            }
+            Ok(steam) => match steam.find_app(STARBOUND_STEAM_ID) {
+                Err(e) => {
+                    log::error!("{e}");
+                    None
+                },
+                Ok(None) => {
+                    log::error!("Starbound in not installed via steam. Please specify the location to find vanilla assets via SBI_VANILLA_ASSETS_DIR or the `--assets=/path/to/vanilla/assets` argument.");
+                    None
+                },
+                Ok(Some((starbound, library))) => {
+                    Some(library.resolve_app_dir(&starbound))
+                }
+            }
+        };
 
         let vanilla_assets = {
             let vanilla_assets_source_cli = cli.assets;
             let vanilla_assets_source_env = parse_path_from_env("SBI_VANILLA_ASSETS_DIR");
-            vanilla_assets_source_cli.or(vanilla_assets_source_env).ok_or(SBIInitializationError::NoVanillaAssets)?
+            let vanilla_assets_source_steam = starbound_steam_dir.map(|d|d.join("assets"));
+
+            vanilla_assets_source_cli
+                .or(vanilla_assets_source_env)
+                .or(vanilla_assets_source_steam)
+                .ok_or(SBIInitializationError::NoVanillaAssets)?
         };
 
         Ok(Self {
