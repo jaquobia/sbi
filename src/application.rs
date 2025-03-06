@@ -2,14 +2,19 @@ use std::path::PathBuf;
 
 use iced::{
     alignment::Vertical,
-    widget::container,
+    widget::{self, center, container, horizontal_space, mouse_area, opaque, vertical_space},
     Element,
     Length::{self, Fill},
     Task,
 };
 
-use crate::{config::SBIConfig, executable::Executable, game_launcher::{self, SBILaunchStatus}, profile::Profile, SBIDirectories};
-
+use crate::{
+    config::SBIConfig,
+    executable::Executable,
+    game_launcher::{self, SBILaunchStatus},
+    profile::Profile,
+    SBIDirectories,
+};
 
 // New Profile Submenu
 
@@ -41,21 +46,21 @@ impl NewProfileType {
         match self {
             Self::Empty { name } => {
                 let create_button_message = (!name.is_empty()).then_some(Message::CreateProfile);
-                iced::widget::column![
-                    iced::widget::column![
-                        iced::widget::text("New Profile - Empty"),
-                        iced::widget::text_input("-Name-", name).on_input(|s| {
+                widget::column![
+                    widget::column![
+                        widget::text("New Profile - Empty"),
+                        widget::text_input("-Name-", name).on_input(|s| {
                             Message::NewProfileMessage(NewProfileSubmenuMessage::TextFieldEditName(
                                 s,
                             ))
                         }),
                     ]
                     .spacing(8),
-                    iced::widget::vertical_space(),
-                    iced::widget::row![
-                        iced::widget::button("Back").on_press(Message::ButtonNewProfilePressed),
-                        iced::widget::horizontal_space(),
-                        iced::widget::button("Create").on_press_maybe(create_button_message),
+                    widget::vertical_space(),
+                    widget::row![
+                        widget::button("Back").on_press(Message::ButtonNewProfilePressed),
+                        widget::horizontal_space(),
+                        widget::button("Create").on_press_maybe(create_button_message),
                     ]
                 ]
                 .padding(5)
@@ -127,29 +132,41 @@ impl Application {
                 // re-select a profile.
                 self.selected_profile = None;
                 Task::none()
-            },
+            }
             Message::FetchedConfig(config) => {
                 self.executables = config.executables;
                 Task::none()
-            },
+            }
             Message::LaunchedGame(status) => {
                 log::info!("Launched Game: {status:?}");
                 Task::none()
-            },
+            }
             Message::CreateProfile => {
                 if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_ref() {
                     let profile = match t {
                         NewProfileType::Empty { name } => {
                             log::info!("Creating new empty profile - {name}");
                             // Make a new profile with just a name
-                            crate::profile::ProfileJson { name: name.clone(), additional_assets: None, collection_id: None }
+                            crate::profile::ProfileJson {
+                                name: name.clone(),
+                                additional_assets: None,
+                                collection_id: None,
+                            }
                         }
                     };
 
                     self.submenu = None;
                     let profiles_dir = self.dirs().profiles().to_path_buf();
-                    let maybe_vanilla_profile_dir = self.dirs().vanilla_storage().map(PathBuf::from);
-                    Task::perform(crate::profile::create_profile_then_find_list(profile, profiles_dir, maybe_vanilla_profile_dir), Message::FetchedProfiles)
+                    let maybe_vanilla_profile_dir =
+                        self.dirs().vanilla_storage().map(PathBuf::from);
+                    Task::perform(
+                        crate::profile::create_profile_then_find_list(
+                            profile,
+                            profiles_dir,
+                            maybe_vanilla_profile_dir,
+                        ),
+                        Message::FetchedProfiles,
+                    )
                 } else {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
                     Task::none()
@@ -176,12 +193,27 @@ impl Application {
                 Task::none()
             }
             Message::ButtonLaunchPressed => {
-                let profile = self.selected_profile.and_then(|p|self.profiles.get(p)).cloned().expect("No profile selected?!");
-                let executable = self.selected_executable.as_ref().cloned().expect("No executable selected?!");
+                let profile = self
+                    .selected_profile
+                    .and_then(|p| self.profiles.get(p))
+                    .cloned()
+                    .expect("No profile selected?!");
+                let executable = self
+                    .selected_executable
+                    .as_ref()
+                    .cloned()
+                    .expect("No executable selected?!");
                 let vanilla_assets = self.dirs().vanilla_assets().to_path_buf();
                 log::info!("Launching {} with {:?}", profile.name(), executable);
-                let executable = self.executables.get(&executable).cloned().expect("No executable matching name?!");
-                Task::perform(game_launcher::launch_game(executable, profile, vanilla_assets), Message::LaunchedGame)
+                let executable = self
+                    .executables
+                    .get(&executable)
+                    .cloned()
+                    .expect("No executable matching name?!");
+                Task::perform(
+                    game_launcher::launch_game(executable, profile, vanilla_assets),
+                    Message::LaunchedGame,
+                )
             }
             Message::ButtonNewProfilePressed => {
                 log::info!("New profile pressed...");
@@ -231,35 +263,35 @@ impl Application {
         let configure_profile_buttton_message = self
             .selected_profile
             .and_then(|p_i| self.profiles.get(p_i))
-            .filter(|p| !p.is_vanilla() )
+            .filter(|p| !p.is_vanilla())
             .map(|_p_i| Message::ButtonSettingsPressed);
-        let settings_button = iced::widget::button("Configure Profile")
+        let settings_button = widget::button("Configure Profile")
             .on_press_maybe(configure_profile_buttton_message);
 
         let new_profile_button =
-            iced::widget::button("New Profile").on_press(Message::ButtonNewProfilePressed);
+            widget::button("New Profile").on_press(Message::ButtonNewProfilePressed);
 
         let launch_button_message = self
             .selected_profile
             .and(self.selected_executable.as_ref())
             .map(|_p_i| Message::ButtonLaunchPressed);
-        let launch_button = iced::widget::button("Launch").on_press_maybe(launch_button_message);
+        let launch_button = widget::button("Launch").on_press_maybe(launch_button_message);
         let executables = Vec::from_iter(self.executables.keys().cloned());
-        let executable_picker = iced::widget::pick_list(
+        let executable_picker = widget::pick_list(
             executables,
             self.selected_executable.clone(),
             Message::SelectExecutable,
         )
         .placeholder("Select an executable...");
         let debug_checkbox =
-            iced::widget::checkbox("Debug", self.debug).on_toggle(Message::ToggleDebug);
+            widget::checkbox("Debug", self.debug).on_toggle(Message::ToggleDebug);
 
-        let controls_right = iced::widget::row![executable_picker, launch_button,].spacing(5);
-        let controls = iced::widget::row![
+        let controls_right = widget::row![executable_picker, launch_button,].spacing(5);
+        let controls = widget::row![
             settings_button,
             new_profile_button,
             debug_checkbox,
-            iced::widget::horizontal_space(),
+            horizontal_space(),
             controls_right,
         ]
         .spacing(5)
@@ -268,7 +300,7 @@ impl Application {
 
         // Profiles Menu
         let body = self.view_select_profile();
-        let content = iced::widget::column![body, controls,].padding(5);
+        let content = widget::column![body, controls,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
                 SubMenu::NewProfile(t) => match t {
@@ -281,7 +313,7 @@ impl Application {
             })
         });
         let stacked_content =
-            iced::widget::stack(std::iter::once(content.into())).push_maybe(popup);
+            widget::stack(std::iter::once(content.into())).push_maybe(popup);
 
         // Total content
         let content: Element<'_, Message> = stacked_content.into();
@@ -298,25 +330,21 @@ impl Application {
                 .selected_profile
                 .is_some_and(|p_i| p_i == i)
                 .then(|| iced::Color::from_rgba(0.3, 0.7, 0.2, 1.0));
-            let text = iced::widget::column![
-                iced::widget::text!("{}", p)
-                    .width(Fill)
-                    .color_maybe(text_color),
-                iced::widget::horizontal_rule(2),
+            let text = widget::column![
+                widget::text!("{}", p).width(Fill).color_maybe(text_color),
+                widget::horizontal_rule(2),
             ];
             (
                 i,
-                iced::widget::mouse_area(text)
-                    .on_press(Message::SelectProfile(i))
-                    .into(),
+                mouse_area(text).on_press(Message::SelectProfile(i)).into(),
             )
         };
         let profiles = self.profiles.iter().map(|p| p.name());
-        let profiles = iced::widget::keyed_column(profiles.enumerate().map(profile_to_widget))
+        let profiles = widget::keyed_column(profiles.enumerate().map(profile_to_widget))
             .width(Length::Fill)
             .align_items(iced::Alignment::Start)
             .spacing(8);
-        iced::widget::scrollable(profiles)
+        widget::scrollable(profiles)
             .height(Length::Fill)
             .spacing(3)
             .into()
@@ -335,22 +363,28 @@ impl Application {
             }
         };
         // Dyanmically size the popup to be 50% of the window's width and height
-        let inner_popup = iced::widget::column![
-            iced::widget::vertical_space(),
-            iced::widget::row![
-                iced::widget::horizontal_space(),
-                iced::widget::container(content_in)
-                    .width(Length::FillPortion(2))
-                    .height(Length::FillPortion(2))
-                    .style(popup_style),
-                iced::widget::horizontal_space(),
+        let inner_popup = widget::column![
+            widget::vertical_space(),
+            widget::row![
+                widget::horizontal_space(),
+                opaque(
+                    container(content_in)
+                        .width(Length::FillPortion(2))
+                        .height(Length::FillPortion(2))
+                        .style(popup_style)
+                ),
+                widget::horizontal_space(),
             ],
-            iced::widget::vertical_space(),
+            widget::vertical_space(),
         ];
         // Fade the lower layer and intercept mouse inputs, center the popup
-        iced::widget::opaque(
-            iced::widget::center(iced::widget::opaque(inner_popup)).style(|_theme| {
-                container::Style {
+        opaque(
+            mouse_area(
+                center(
+                    // opaque(
+                    inner_popup, // )
+                )
+                .style(|_theme| container::Style {
                     background: Some(
                         iced::Color {
                             a: 0.8,
@@ -359,33 +393,40 @@ impl Application {
                         .into(),
                     ),
                     ..Default::default()
-                }
-            }),
+                }),
+            )
+            .on_press(Message::ButtonExitSubmenuPressed),
         )
         // .explain(iced::Color::from_rgb(1.0, 0.5, 0.0))
     }
 
     fn view_submenu_new_profile(&self) -> Element<'_, Message> {
-        iced::widget::column![
-            iced::widget::column![
-                iced::widget::text("New Profile"),
-                iced::widget::button("Empty").on_press(Message::ButtonNewProfileEmptyPressed),
-                iced::widget::button("Vanilla (Steam)"),
-                iced::widget::button("Collection (Steam)"),
+        widget::column![
+            widget::column![
+                widget::text("New Profile"),
+                widget::button("Empty").on_press(Message::ButtonNewProfileEmptyPressed),
+                widget::button("Vanilla (Steam)"),
+                widget::button("Collection (Steam)"),
             ]
             .spacing(8),
-            iced::widget::vertical_space(),
-            iced::widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
+            widget::vertical_space(),
+            widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
         ]
         .padding(5)
         .into()
     }
 
     fn view_submenu_configure_profile(&self) -> Element<'_, Message> {
-        iced::widget::row![].into()
+        widget::column![
+            widget::column![widget::text("Configuring Profile"),].spacing(8),
+            widget::vertical_space(),
+            widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
+        ]
+        .padding(5)
+        .into()
     }
 
     fn view_submenu_settings(&self) -> Element<'_, Message> {
-        iced::widget::row![].into()
+        widget::row![].into()
     }
 }
