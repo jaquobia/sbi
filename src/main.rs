@@ -4,6 +4,8 @@ use std::{
 };
 
 use application::{Application, Message};
+use clap::Parser;
+use cli_args::CliArgs;
 use directories::ProjectDirs;
 use iced::Task;
 
@@ -32,12 +34,35 @@ static LOCAL_PIPE_FS_NAME: &str = "/tmp/@SBI_PIPE_NAME";
 enum SBIInitializationError {
     #[error("Could not find the relevant folders to store application data in")]
     NoProjectDirectories,
-    #[error("...")]
+    #[error("{0}")]
     LoggerFailure(#[from] flexi_logger::FlexiLoggerError),
-    #[error("...")]
+    #[error("{0}")]
     IcedApplicationError(#[from] iced::Error),
     #[error("No vanilla assets directory! Please launch the game through steam with `sbi -- %command%` or directly with `SBI_VANILLA_ASSETS_DIR=some/path/ sbi`. SBI_VANILLA_ASSETS will take priority over the arguments.")]
-    NoVanillaAssets
+    NoVanillaAssets,
+    #[error("{0}")]
+    ClapFailedToParseCLI(#[from] clap::Error),
+}
+
+
+/// Reads an environment variable and returns the value as a PathBuf, or None if parsing failed.
+/// If parsing the variable leads to a NotUnicode error, a relevant error message will also be printed.
+fn parse_path_from_env(variable: &str) -> Option<PathBuf> {
+    match std::env::var(variable) {
+        Err(e) => {
+            // If it is a Unicode error, then the variable exists but we can't read it. Report it
+            // to the user.
+            if let VarError::NotUnicode(s) = e {
+                log::error!(
+                    "{variable} exists but contains non-unicode characters: {}",
+                    s.to_string_lossy()
+                );
+            }
+            // Else, the variable does not exist and the user did not intend set a value.
+            None
+        },
+        Ok(d) => Some(PathBuf::from(d)),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -48,29 +73,21 @@ struct SBIDirectories {
 }
 
 impl SBIDirectories {
-    fn new() -> Result<Self, SBIInitializationError> {
-        let proj_dirs =
+    fn new(cli: CliArgs) -> Result<Self, SBIInitializationError> {
+        let default_proj_dirs =
             ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME)
                 .ok_or(SBIInitializationError::NoProjectDirectories)?;
 
-        let data_dir = match std::env::var("SBI_DATA_DIR") {
-            Err(e) => {
-                if let VarError::NotUnicode(s) = e {
-                    log::error!(
-                        "SBI_DATA_DIR exists but contains non-unicode characters: {}",
-                        s.to_string_lossy()
-                    );
-                }
-                None
-            }
-            Ok(d) => Some(PathBuf::from(d)),
-        }
-        .unwrap_or_else(|| proj_dirs.data_dir().to_path_buf());
+        let data_dir = parse_path_from_env("SBI_DATA_DIR")
+        .unwrap_or_else(|| default_proj_dirs.data_dir().to_path_buf());
 
         let profiles_dir = data_dir.join("profiles");
 
-        let vanilla_assets = std::env::var("SBI_VANILLA_ASSETS_DIR").map_err(|_| SBIInitializationError::NoVanillaAssets)?;
-        let vanilla_assets = PathBuf::from(vanilla_assets);
+        let vanilla_assets = {
+            let vanilla_assets_source_cli = cli.assets;
+            let vanilla_assets_source_env = parse_path_from_env("SBI_VANILLA_ASSETS_DIR");
+            vanilla_assets_source_cli.or(vanilla_assets_source_env).ok_or(SBIInitializationError::NoVanillaAssets)?
+        };
 
         Ok(Self {
             data_directory: data_dir,
@@ -102,7 +119,9 @@ fn main() -> Result<(), SBIInitializationError> {
         // )
         .start()?;
 
-    let dirs = SBIDirectories::new()?;
+    let cli = CliArgs::parse();
+
+    let dirs = SBIDirectories::new(cli)?;
 
     if !dirs.data().exists() {
         if let Err(e) = std::fs::create_dir_all(dirs.data()) {

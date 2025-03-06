@@ -23,8 +23,7 @@ pub struct Executable {
 impl Executable {
     pub fn assets(&self) -> Option<PathBuf> {
         self.assets.as_ref().map(|d| if d.is_relative() {
-            log::info!("Assets dir is relative: {}", d.display());
-            self.bin.parent().expect("Missing executable path (is relative)").join(d)
+            self.bin.parent().map(|p|p.join(d)).expect("Missing executable path (is relative or root)")
         } else {
             d.to_path_buf()
         })

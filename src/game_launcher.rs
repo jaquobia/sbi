@@ -56,12 +56,15 @@ async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::R
         std::env::join_paths(ld_paths).ok()
     };
 
+    std::env::set_current_dir(instance_dir)?;
+
     let mut command = tokio::process::Command::new(executable_path);
-    command.current_dir(instance_dir);
+    // command.current_dir(instance_dir);
     let bootconfig = instance_dir
         .join(STARBOUND_BOOT_CONFIG_NAME)
         .display()
         .to_string();
+    // let bootconfig = ["./", STARBOUND_BOOT_CONFIG_NAME].join("");
     if let Some(path) = new_ld_path_var {
         log::info!("Setting {OS_LD_LIBRARY_NAME} to {}",path.to_string_lossy());
         command.env(OS_LD_LIBRARY_NAME, path);
@@ -75,9 +78,10 @@ async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::R
 
     // This async thread is not necessary as we don't want to own children
     // but this also causes no harm
-    command.stdout(Stdio::null()).stderr(Stdio::null());                                                          
+    command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
     // tokio::task::spawn(async move {  });
-    command.spawn()?.wait().await?;
+    let exit_status = command.spawn()?.wait().await?;
+    log::info!("{}", exit_status);
     Ok(())
 }
 
