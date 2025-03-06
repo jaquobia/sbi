@@ -82,6 +82,11 @@ impl SBIDirectories {
             .unwrap_or_else(|| default_proj_dirs.data_dir().to_path_buf());
 
         let profiles_dir = data_dir.join("profiles");
+        if !profiles_dir.exists() {
+            if let Err(e) = std::fs::create_dir_all(&profiles_dir) {
+                log::error!("Failed to make profiles directory: {e}. Without a profiles directory, the application will not load or create profiles.");
+            }
+        }
 
         let starbound_steam_dir = match steamlocate::SteamDir::locate() {
             Err(e) => {
