@@ -32,14 +32,12 @@ static STARBOUND_BOOT_CONFIG_NAME: &str = "sbinit.config";
 
 #[derive(Debug, thiserror::Error)]
 enum SBIInitializationError {
-    #[error("Could not find the relevant folders to store application data in")]
-    NoProjectDirectories,
+    #[error("{0}")]
+    NoProjectDirectories(#[from] SBIDirectoryError),
     #[error("{0}")]
     LoggerFailure(#[from] flexi_logger::FlexiLoggerError),
     #[error("{0}")]
     IcedApplicationError(#[from] iced::Error),
-    #[error("No vanilla assets directory! Please launch the game through steam with `sbi -- %command%` or directly with `SBI_VANILLA_ASSETS_DIR=some/path/ sbi`. SBI_VANILLA_ASSETS will take priority over the arguments.")]
-    NoVanillaAssets,
     #[error("{0}")]
     ClapFailedToParseCLI(#[from] clap::Error),
 }
@@ -64,6 +62,18 @@ pub fn parse_path_from_env(variable: &str) -> Option<PathBuf> {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+enum SBIDirectoryError {
+    #[error("No home directory could be found. Default directories cannot be constructed.")]
+    NoDefaultDirectories,
+    #[error("No vanilla assets directory! Please launch the game through steam with `sbi -- %command%` or directly with `SBI_VANILLA_ASSETS_DIR=some/path/ sbi`. SBI_VANILLA_ASSETS will take priority over the arguments.")]
+    NoVanillaAssetsDirectory,
+    #[error("SBI data directory cannot be created: {0}")]
+    FailedToCreateDataDir(std::io::Error),
+    #[error("SBI profiles directory cannot be created: {0}")]
+    FailedToCreateProfilesDir(std::io::Error),
+}
+
 #[derive(Debug, Clone)]
 struct SBIDirectories {
     data_directory: PathBuf,
@@ -73,19 +83,23 @@ struct SBIDirectories {
 }
 
 impl SBIDirectories {
-    fn new(cli: CliArgs) -> Result<Self, SBIInitializationError> {
+    fn new(cli: CliArgs) -> Result<Self, SBIDirectoryError> {
+        // TODO: Ensure this error gets ignored if the data directory is specified through environment
+        // variables.
         let default_proj_dirs =
             ProjectDirs::from(ORGANIZATION_QUALIFIER, ORGANIZATION_NAME, APPLICATION_NAME)
-                .ok_or(SBIInitializationError::NoProjectDirectories)?;
+                .ok_or(SBIDirectoryError::NoDefaultDirectories)?;
 
         let data_dir = parse_path_from_env("SBI_DATA_DIR")
             .unwrap_or_else(|| default_proj_dirs.data_dir().to_path_buf());
+        if !data_dir.exists() {
+            std::fs::create_dir_all(&data_dir).map_err(SBIDirectoryError::FailedToCreateDataDir)?;
+        }
 
         let profiles_dir = data_dir.join("profiles");
         if !profiles_dir.exists() {
-            if let Err(e) = std::fs::create_dir_all(&profiles_dir) {
-                log::error!("Failed to make profiles directory: {e}. Without a profiles directory, the application will not load or create profiles.");
-            }
+            std::fs::create_dir_all(&profiles_dir)
+                .map_err(SBIDirectoryError::FailedToCreateProfilesDir)?;
         }
 
         let starbound_steam_dir = match steamlocate::SteamDir::locate() {
@@ -97,29 +111,28 @@ impl SBIDirectories {
                 Err(e) => {
                     log::error!("{e}");
                     None
-                },
+                }
                 Ok(None) => {
                     log::error!("Starbound in not installed via steam. Please specify the location to find vanilla assets via SBI_VANILLA_ASSETS_DIR or the `--assets=/path/to/vanilla/assets` argument.");
                     None
-                },
-                Ok(Some((starbound, library))) => {
-                    Some(library.resolve_app_dir(&starbound))
                 }
-            }
+                Ok(Some((starbound, library))) => Some(library.resolve_app_dir(&starbound)),
+            },
         };
 
         let vanilla_assets = {
             let vanilla_assets_source_cli = cli.assets;
             let vanilla_assets_source_env = parse_path_from_env("SBI_VANILLA_ASSETS_DIR");
-            let vanilla_assets_source_steam = starbound_steam_dir.as_ref().map(|d|d.join("assets"));
+            let vanilla_assets_source_steam =
+                starbound_steam_dir.as_ref().map(|d| d.join("assets"));
 
             vanilla_assets_source_cli
                 .or(vanilla_assets_source_env)
                 .or(vanilla_assets_source_steam)
-                .ok_or(SBIInitializationError::NoVanillaAssets)?
+                .ok_or(SBIDirectoryError::NoVanillaAssetsDirectory)?
         };
 
-        let vanilla_storage = starbound_steam_dir.map(|d|d.join("storage"));
+        let vanilla_storage = starbound_steam_dir.map(|d| d.join("storage"));
 
         Ok(Self {
             data_directory: data_dir,
@@ -159,14 +172,6 @@ fn main() -> Result<(), SBIInitializationError> {
     let cli = CliArgs::parse();
 
     let dirs = SBIDirectories::new(cli)?;
-
-    if !dirs.data().exists() {
-        if let Err(e) = std::fs::create_dir_all(dirs.data()) {
-            log::error!("Data directory does not exist and could not be created: {e}");
-        }
-    }
-
-    // let cli_args: CliArgs = clap::Parser::try_parse()?;
 
     let application = Application::new(dirs);
     let profiles_dir = application.dirs().profiles().to_path_buf();
