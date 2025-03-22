@@ -339,9 +339,10 @@ impl Application {
                 mouse_area(text).on_press(Message::SelectProfile(i)).into(),
             )
         };
-        let profiles = self.profiles.iter().map(|p| p.name());
+        let profiles = self.profiles.iter().map(Profile::name);
         let profiles = widget::keyed_column(profiles.enumerate().map(profile_to_widget))
             .width(Length::Fill)
+            .padding(30)
             .align_items(iced::Alignment::Start)
             .spacing(8);
         widget::scrollable(profiles)
