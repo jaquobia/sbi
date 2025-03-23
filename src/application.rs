@@ -5,7 +5,7 @@ use iced::{
     widget::{self, center, container, horizontal_space, mouse_area, opaque, vertical_space},
     Element,
     Length::{self, Fill},
-    Task,
+    Padding, Task,
 };
 
 use crate::{
@@ -259,23 +259,12 @@ impl Application {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        // Bottom Bar
-        let configure_profile_buttton_message = self
-            .selected_profile
-            .and_then(|p_i| self.profiles.get(p_i))
-            .filter(|p| !p.is_vanilla())
-            .map(|_p_i| Message::ButtonSettingsPressed);
-        let settings_button = widget::button("Configure Profile")
-            .on_press_maybe(configure_profile_buttton_message);
 
+        // New Profile Button
         let new_profile_button =
             widget::button("New Profile").on_press(Message::ButtonNewProfilePressed);
 
-        let launch_button_message = self
-            .selected_profile
-            .and(self.selected_executable.as_ref())
-            .map(|_p_i| Message::ButtonLaunchPressed);
-        let launch_button = widget::button("Launch").on_press_maybe(launch_button_message);
+        // Executable Picker
         let executables = Vec::from_iter(self.executables.keys().cloned());
         let executable_picker = widget::pick_list(
             executables,
@@ -283,24 +272,49 @@ impl Application {
             Message::SelectExecutable,
         )
         .placeholder("Select an executable...");
-        let debug_checkbox =
-            widget::checkbox("Debug", self.debug).on_toggle(Message::ToggleDebug);
 
-        let controls_right = widget::row![executable_picker, launch_button,].spacing(5);
+        // Debug Checkbox
+        let debug_checkbox = widget::checkbox("Debug", self.debug).on_toggle(Message::ToggleDebug);
+
+        // Top Bar
         let controls = widget::row![
-            settings_button,
             new_profile_button,
+            executable_picker,
             debug_checkbox,
-            horizontal_space(),
-            controls_right,
         ]
         .spacing(5)
         .height(40)
         .align_y(Vertical::Center);
 
-        // Profiles Menu
-        let body = self.view_select_profile();
-        let content = widget::column![body, controls,].padding(5);
+        // Launch Button
+        let launch_button_message = self
+            .selected_profile
+            .and(self.selected_executable.as_ref())
+            .map(|_p_i| Message::ButtonLaunchPressed);
+
+        let launch_button = widget::button("Launch").on_press_maybe(launch_button_message).width(Length::Fill);
+
+        // Configure Profile Button
+        let configure_profile_buttton_message = self
+            .selected_profile
+            .and_then(|p_i| self.profiles.get(p_i))
+            .filter(|p| !p.is_vanilla())
+            .map(|_p_i| Message::ButtonSettingsPressed);
+
+        let configure_profile_button =
+            widget::button("Configure Profile").on_press_maybe(configure_profile_buttton_message).width(Length::Fill);
+
+        // Profile Configuration Panel
+        let profile_controls = widget::column![launch_button, configure_profile_button,]
+            .width(250)
+            .spacing(3)
+            .padding(Padding::new(5.0));
+
+        let maybe_profile_controls = self.selected_profile.map(|_i| profile_controls);
+
+        // Combine Profiles List, Profile Controls, Top Bar, and Popup Submenus
+        let body = widget::row![self.view_select_profile()].push_maybe(maybe_profile_controls);
+        let content = widget::column![controls, body,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
                 SubMenu::NewProfile(t) => match t {
@@ -312,10 +326,9 @@ impl Application {
                 SubMenu::Settings => self.view_submenu_settings(),
             })
         });
-        let stacked_content =
-            widget::stack(std::iter::once(content.into())).push_maybe(popup);
+        let stacked_content = widget::stack(std::iter::once(content.into())).push_maybe(popup);
 
-        // Total content
+        // Enable Debug Overlay + return
         let content: Element<'_, Message> = stacked_content.into();
         if self.debug {
             content.explain(iced::Color::WHITE)
@@ -330,10 +343,11 @@ impl Application {
                 .selected_profile
                 .is_some_and(|p_i| p_i == i)
                 .then(|| iced::Color::from_rgba(0.3, 0.7, 0.2, 1.0));
-            let text = widget::column![
-                widget::text!("{}", p).width(Fill).color_maybe(text_color),
-                widget::horizontal_rule(2),
-            ];
+            let raw_text = widget::text!("{}", p)
+                .width(Fill)
+                .color_maybe(text_color)
+                .size(20);
+            let text = widget::column![raw_text, widget::horizontal_rule(2),];
             (
                 i,
                 mouse_area(text).on_press(Message::SelectProfile(i)).into(),
@@ -342,12 +356,11 @@ impl Application {
         let profiles = self.profiles.iter().map(Profile::name);
         let profiles = widget::keyed_column(profiles.enumerate().map(profile_to_widget))
             .width(Length::Fill)
-            .padding(30)
             .align_items(iced::Alignment::Start)
             .spacing(8);
-        widget::scrollable(profiles)
-            .height(Length::Fill)
-            .spacing(3)
+        let scrolling_profiles = widget::scrollable(profiles).height(Length::Fill).spacing(3);
+        widget::container(scrolling_profiles)
+            .width(Length::FillPortion(4))
             .into()
     }
 
