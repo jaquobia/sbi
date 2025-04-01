@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use iced::{
     alignment::Vertical,
-    widget::{self, center, container, horizontal_space, mouse_area, opaque, vertical_space},
+    widget::{self, center, container, mouse_area, opaque},
     Element,
     Length::{self, Fill},
     Padding, Task,
@@ -70,31 +70,63 @@ impl NewProfileType {
     }
 }
 
+// Settings Submenu
+#[derive(Debug, Clone)]
+enum SettingsSubmenuMessage {
+    ClickExecutableListItem(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct SettingsSubmenuData {
+    selected_executable: Option<usize>,
+}
+
+impl SettingsSubmenuData {
+    fn new() -> Self {
+        Self {
+            selected_executable: None,
+        }
+    }
+
+    fn update(&mut self, m: SettingsSubmenuMessage) -> Task<Message> {
+        match m {
+            SettingsSubmenuMessage::ClickExecutableListItem(i) => {
+                self.selected_executable = Some(i);
+                Task::none()
+            }
+        }
+    }
+}
+
 // Main Application
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
     NewProfile(Option<NewProfileType>),
     ConfigureProfile,
-    Settings,
+    Settings(SettingsSubmenuData),
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)]
 pub enum Message {
+    Dummy(()),
     FetchedProfiles(Vec<Profile>),
     FetchedConfig(SBIConfig),
     LaunchedGame(SBILaunchStatus),
     CreateProfile,
     SelectExecutable(String),
     ButtonSettingsPressed,
+    ButtonConfigureProfilePressed,
     ButtonLaunchPressed,
     ButtonExitSubmenuPressed,
     ButtonNewProfilePressed,
     ButtonNewProfileEmptyPressed,
     ToggleDebug(bool),
     SelectProfile(usize),
-    #[allow(clippy::enum_variant_names)]
+    // Submenu messages
     NewProfileMessage(NewProfileSubmenuMessage),
+    SettingsMessage(SettingsSubmenuMessage),
 }
 
 #[derive(Debug, Clone)]
@@ -123,6 +155,7 @@ impl Application {
     }
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Dummy(()) => Task::none(),
             Message::FetchedProfiles(profiles) => {
                 log::info!("Fetched profiles using async tasks! ({})", profiles.len());
                 self.profiles = profiles;
@@ -183,7 +216,21 @@ impl Application {
                 Task::none()
             }
             Message::ButtonSettingsPressed => {
-                log::info!("Settings was pressed");
+                // async fn pick_executable() {
+                //     let file: Option<rfd::FileHandle> = rfd::AsyncFileDialog::new().pick_file().await;
+                //     if let Some(file) = file {
+                //         let file_name = file.file_name();
+                //         let path = file.path();
+                //         println!("{} at {}", file_name, path.display());
+                //     }
+                // }
+                // log::info!("Settings was pressed");
+                self.submenu = Some(SubMenu::Settings(SettingsSubmenuData::new()));
+                // Task::perform(pick_executable(), Message::Dummy)
+                Task::none()
+            }
+            Message::ButtonConfigureProfilePressed => {
+                log::info!("Configure Profile was pressed");
                 self.submenu = Some(SubMenu::ConfigureProfile);
                 Task::none()
             }
@@ -247,6 +294,13 @@ impl Application {
                     Task::none()
                 }
             }
+            Message::SettingsMessage(m) => {
+                if let Some(SubMenu::Settings(s)) = self.submenu.as_mut() {
+                    s.update(m)
+                } else {
+                    Task::none()
+                }
+            }
         }
     }
 
@@ -259,6 +313,8 @@ impl Application {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
+        // Settings Button
+        let settings_button = widget::button("Settings").on_press(Message::ButtonSettingsPressed);
 
         // New Profile Button
         let new_profile_button =
@@ -278,6 +334,7 @@ impl Application {
 
         // Top Bar
         let controls = widget::row![
+            settings_button,
             new_profile_button,
             executable_picker,
             debug_checkbox,
@@ -292,17 +349,20 @@ impl Application {
             .and(self.selected_executable.as_ref())
             .map(|_p_i| Message::ButtonLaunchPressed);
 
-        let launch_button = widget::button("Launch").on_press_maybe(launch_button_message).width(Length::Fill);
+        let launch_button = widget::button("Launch")
+            .on_press_maybe(launch_button_message)
+            .width(Length::Fill);
 
         // Configure Profile Button
         let configure_profile_buttton_message = self
             .selected_profile
             .and_then(|p_i| self.profiles.get(p_i))
             .filter(|p| !p.is_vanilla())
-            .map(|_p_i| Message::ButtonSettingsPressed);
+            .map(|_p_i| Message::ButtonConfigureProfilePressed);
 
-        let configure_profile_button =
-            widget::button("Configure Profile").on_press_maybe(configure_profile_buttton_message).width(Length::Fill);
+        let configure_profile_button = widget::button("Configure Profile")
+            .on_press_maybe(configure_profile_buttton_message)
+            .width(Length::Fill);
 
         // Profile Configuration Panel
         let profile_controls = widget::column![launch_button, configure_profile_button,]
@@ -323,7 +383,7 @@ impl Application {
                 },
                 // SubMenu::NewProfileEmpty => self.view_submenu_new_profile_empty(),
                 SubMenu::ConfigureProfile => self.view_submenu_configure_profile(),
-                SubMenu::Settings => self.view_submenu_settings(),
+                SubMenu::Settings(_) => self.view_submenu_settings(),
             })
         });
         let stacked_content = widget::stack(std::iter::once(content.into())).push_maybe(popup);
@@ -441,6 +501,45 @@ impl Application {
     }
 
     fn view_submenu_settings(&self) -> Element<'_, Message> {
-        widget::row![].into()
+        let selected = if let Some(SubMenu::Settings(s)) = self.submenu.as_ref() {
+            s.selected_executable
+        } else {
+            None
+        };
+        let executable_to_element =
+            |(i, (executable_name, _executable))| -> (usize, Element<'_, Message>) {
+                let color = selected.filter(|&selected| selected == i).and(Some(iced::color!(0x00ff00)));
+                let clickable = widget::mouse_area(widget::row![widget::text(executable_name).color_maybe(color)])
+                    .on_press(Message::SettingsMessage(
+                        SettingsSubmenuMessage::ClickExecutableListItem(i),
+                    ));
+                (i, clickable.into())
+            };
+        let executables = widget::keyed_column(
+            self.executables
+                .iter()
+                .enumerate()
+                .map(executable_to_element),
+        );
+
+        widget::column![
+            widget::text("Settings"),
+            widget::column![
+                widget::text("Executables"),
+                widget::horizontal_rule(2),
+                widget::scrollable(executables),
+                widget::horizontal_rule(2)
+            ],
+            widget::row![
+                widget::button("Add"),
+                widget::button("Modify"),
+                widget::button("Remove")
+            ]
+            .spacing(5),
+            widget::vertical_space(),
+            widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
+        ]
+        .padding(5)
+        .into()
     }
 }
