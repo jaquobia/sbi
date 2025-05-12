@@ -72,7 +72,7 @@ impl NewProfileType {
 
 // Settings Submenu
 #[derive(Debug, Clone)]
-enum SettingsSubmenuMessage {
+pub enum SettingsSubmenuMessage {
     ClickExecutableListItem(usize),
 }
 
@@ -216,6 +216,7 @@ impl Application {
                 Task::none()
             }
             Message::ButtonSettingsPressed => {
+                // self.submenu = Some(SubMenu::Settings(SettingsSubmenuData::new()));
                 // async fn pick_executable() {
                 //     let file: Option<rfd::FileHandle> = rfd::AsyncFileDialog::new().pick_file().await;
                 //     if let Some(file) = file {
@@ -224,8 +225,7 @@ impl Application {
                 //         println!("{} at {}", file_name, path.display());
                 //     }
                 // }
-                // log::info!("Settings was pressed");
-                self.submenu = Some(SubMenu::Settings(SettingsSubmenuData::new()));
+                log::info!("Settings was pressed");
                 // Task::perform(pick_executable(), Message::Dummy)
                 Task::none()
             }
