@@ -21,52 +21,53 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NewProfileSubmenuMessage {
     TextFieldEditName(String),
+    TextFieldEditCollectionID(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum NewProfileType {
-    Empty { name: String },
+struct NewProfileSubmenu {
+    name: String,
+    collection_id: String,
 }
 
-impl NewProfileType {
+impl NewProfileSubmenu {
+    fn new() -> Self {
+        Self { name: String::from(""), collection_id: String::from("") }
+    }
     fn update(&mut self, message: NewProfileSubmenuMessage) -> Task<Message> {
         match message {
             NewProfileSubmenuMessage::TextFieldEditName(s) => {
-                match self {
-                    Self::Empty { name } => {
-                        *name = s;
-                    }
-                }
+                self.name = s;
+                Task::none()
+            }
+            NewProfileSubmenuMessage::TextFieldEditCollectionID(s) => {
+                self.collection_id = s;
                 Task::none()
             }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
-        match self {
-            Self::Empty { name } => {
-                let create_button_message = (!name.is_empty()).then_some(Message::CreateProfile);
-                widget::column![
-                    widget::column![
-                        widget::text("New Profile - Empty"),
-                        widget::text_input("-Name-", name).on_input(|s| {
-                            Message::NewProfileMessage(NewProfileSubmenuMessage::TextFieldEditName(
-                                s,
-                            ))
-                        }),
-                    ]
-                    .spacing(8),
-                    widget::vertical_space(),
-                    widget::row![
-                        widget::button("Back").on_press(Message::ButtonNewProfilePressed),
-                        widget::horizontal_space(),
-                        widget::button("Create").on_press_maybe(create_button_message),
-                    ]
+        let create_button_message = (!self.name.is_empty()).then_some(Message::CreateProfile);
+        widget::column![
+            widget::column![
+                widget::text("New Profile"),
+                widget::text_input("-Name-", &self.name).on_input(|s| {
+                    Message::NewProfileMessage(NewProfileSubmenuMessage::TextFieldEditName( s ))
+                    }),
+                    widget::text_input("-Collection ID-", &self.collection_id).on_input(|s| {
+                        Message::NewProfileMessage(NewProfileSubmenuMessage::TextFieldEditCollectionID( s ))
+                    }),
+                ].spacing(8),
+                widget::vertical_space(),
+                widget::row![
+                    widget::button("Back").on_press(Message::ButtonExitSubmenuPressed),
+                    widget::horizontal_space(),
+                    widget::button("Create").on_press_maybe(create_button_message),
                 ]
-                .padding(5)
-                .into()
-            }
-        }
+        ]
+        .padding(5)
+        .into()
     }
 }
 
@@ -102,7 +103,7 @@ impl SettingsSubmenuData {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
-    NewProfile(Option<NewProfileType>),
+    NewProfile(NewProfileSubmenu),
     ConfigureProfile,
     Settings(SettingsSubmenuData),
 }
@@ -121,7 +122,6 @@ pub enum Message {
     ButtonLaunchPressed,
     ButtonExitSubmenuPressed,
     ButtonNewProfilePressed,
-    ButtonNewProfileEmptyPressed,
     ToggleDebug(bool),
     SelectProfile(usize),
     // Submenu messages
@@ -175,15 +175,16 @@ impl Application {
                 Task::none()
             }
             Message::CreateProfile => {
-                if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_ref() {
+                if let Some(SubMenu::NewProfile(t)) = self.submenu.as_ref() {
                     let profile = match t {
-                        NewProfileType::Empty { name } => {
-                            log::info!("Creating new empty profile - {name}");
+                        NewProfileSubmenu { name, collection_id } => {
+                            let collection_id = (!collection_id.is_empty()).then_some(collection_id.clone());
+                            log::info!("Creating new profile - {name} : {collection_id:?}");
                             // Make a new profile with just a name
                             crate::profile::ProfileJson {
                                 name: name.clone(),
                                 additional_assets: None,
-                                collection_id: None,
+                                collection_id,
                             }
                         }
                     };
@@ -200,6 +201,7 @@ impl Application {
                         ),
                         Message::FetchedProfiles,
                     )
+
                 } else {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
                     Task::none()
@@ -263,15 +265,8 @@ impl Application {
                 )
             }
             Message::ButtonNewProfilePressed => {
-                log::info!("New profile pressed...");
-                self.submenu = Some(SubMenu::NewProfile(None));
-                Task::none()
-            }
-            Message::ButtonNewProfileEmptyPressed => {
                 log::info!("New profile empty");
-                self.submenu = Some(SubMenu::NewProfile(Some(NewProfileType::Empty {
-                    name: String::from(""),
-                })));
+                self.submenu = Some(SubMenu::NewProfile(NewProfileSubmenu::new()));
                 Task::none()
             }
             Message::SelectProfile(i) => {
@@ -287,7 +282,7 @@ impl Application {
                 Task::none()
             }
             Message::NewProfileMessage(m) => {
-                if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_mut() {
+                if let Some(SubMenu::NewProfile(t)) = self.submenu.as_mut() {
                     t.update(m)
                 } else {
                     log::error!("Error: Tried to send a NewProfile message while not in a valid NewProfile submenu");
@@ -377,10 +372,7 @@ impl Application {
         let content = widget::column![controls, body,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
-                SubMenu::NewProfile(t) => match t {
-                    None => self.view_submenu_new_profile(),
-                    Some(t) => t.view(),
-                },
+                SubMenu::NewProfile(t) => t.view(),
                 // SubMenu::NewProfileEmpty => self.view_submenu_new_profile_empty(),
                 SubMenu::ConfigureProfile => self.view_submenu_configure_profile(),
                 SubMenu::Settings(_) => self.view_submenu_settings(),
@@ -472,22 +464,6 @@ impl Application {
             .on_press(Message::ButtonExitSubmenuPressed),
         )
         // .explain(iced::Color::from_rgb(1.0, 0.5, 0.0))
-    }
-
-    fn view_submenu_new_profile(&self) -> Element<'_, Message> {
-        widget::column![
-            widget::column![
-                widget::text("New Profile"),
-                widget::button("Empty").on_press(Message::ButtonNewProfileEmptyPressed),
-                widget::button("Vanilla (Steam)"),
-                widget::button("Collection (Steam)"),
-            ]
-            .spacing(8),
-            widget::vertical_space(),
-            widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
-        ]
-        .padding(5)
-        .into()
     }
 
     fn view_submenu_configure_profile(&self) -> Element<'_, Message> {
