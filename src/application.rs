@@ -216,18 +216,18 @@ impl Application {
                 Task::none()
             }
             Message::ButtonSettingsPressed => {
-                // self.submenu = Some(SubMenu::Settings(SettingsSubmenuData::new()));
-                // async fn pick_executable() {
-                //     let file: Option<rfd::FileHandle> = rfd::AsyncFileDialog::new().pick_file().await;
-                //     if let Some(file) = file {
-                //         let file_name = file.file_name();
-                //         let path = file.path();
-                //         println!("{} at {}", file_name, path.display());
-                //     }
-                // }
                 log::info!("Settings was pressed");
-                // Task::perform(pick_executable(), Message::Dummy)
-                Task::none()
+                self.submenu = Some(SubMenu::Settings(SettingsSubmenuData::new()));
+                async fn pick_executable() {
+                    let file: Option<rfd::FileHandle> = rfd::AsyncFileDialog::new().pick_file().await;
+                    if let Some(file) = file {
+                        let file_name = file.file_name();
+                        let path = file.path();
+                        println!("{} at {}", file_name, path.display());
+                    }
+                }
+                Task::perform(pick_executable(), Message::Dummy)
+                // Task::none()
             }
             Message::ButtonConfigureProfilePressed => {
                 log::info!("Configure Profile was pressed");
