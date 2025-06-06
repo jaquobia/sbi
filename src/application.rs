@@ -9,12 +9,7 @@ use iced::{
 };
 
 use crate::{
-    config::SBIConfig,
-    executable::Executable,
-    game_launcher::{self, SBILaunchStatus},
-    profile::Profile,
-    SBIDirectories,
-    menus::{NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage}
+    config::{self, SBIConfig}, executable::Executable, game_launcher::{self, SBILaunchStatus}, menus::{NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage}, profile::Profile, SBIDirectories
 };
 
 
@@ -132,7 +127,16 @@ impl Application {
             }
             Message::CreateExecutable(name, path, assets) => {
                 log::info!("Creating executable: {} from {} with {:?}", name, path.display(), assets);
-                Task::none()
+                let executables = {
+                    let mut executables = self.executables.clone();
+                    executables.insert(name, Executable { bin: path, assets });
+                    executables
+                };
+                let config = SBIConfig { executables, ..Default::default() };
+                let dir = self.dirs().data().to_path_buf();
+                let write_task = Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| Message::Dummy(()));
+                let read_task = Task::perform(config::load_config(dir), Message::FetchedConfig);
+                write_task.chain(read_task)
             }
             Message::ToggleDebug(state) => {
                 log::info!("Toggling debug: {}", state);
