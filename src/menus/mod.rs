@@ -100,7 +100,7 @@ impl SettingsSubmenuData {
             SettingsSubmenuMessage::ClickAddExecutableButton => {
                 let name = self.new_executable_name.clone();
                 let path = self.new_executable_path.clone().unwrap();
-                let assets = self.new_executable_assets.clone();
+                let assets = self.new_executable_assets.as_ref().map(|p|p.parent().unwrap().to_owned());
                 Task::done(Message::CreateExecutable(name, path, assets))
             }
             SettingsSubmenuMessage::NewExecutableNameInput(s) => {
