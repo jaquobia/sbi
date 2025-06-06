@@ -1,3 +1,7 @@
 /target
 /.git/
 Cargo.lock
+
+result
+/result
+

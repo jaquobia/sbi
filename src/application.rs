@@ -2,99 +2,46 @@ use std::path::PathBuf;
 
 use iced::{
     alignment::Vertical,
-    widget::{self, center, container, horizontal_space, mouse_area, opaque, vertical_space},
+    widget::{self, center, container, mouse_area, opaque},
     Element,
     Length::{self, Fill},
-    Task,
+    Padding, Task,
 };
 
 use crate::{
-    config::SBIConfig,
-    executable::Executable,
-    game_launcher::{self, SBILaunchStatus},
-    profile::Profile,
-    SBIDirectories,
+    config::{self, SBIConfig}, executable::Executable, game_launcher::{self, SBILaunchStatus}, menus::{NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage}, profile::Profile, SBIDirectories
 };
 
-// New Profile Submenu
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum NewProfileSubmenuMessage {
-    TextFieldEditName(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum NewProfileType {
-    Empty { name: String },
-}
-
-impl NewProfileType {
-    fn update(&mut self, message: NewProfileSubmenuMessage) -> Task<Message> {
-        match message {
-            NewProfileSubmenuMessage::TextFieldEditName(s) => {
-                match self {
-                    Self::Empty { name } => {
-                        *name = s;
-                    }
-                }
-                Task::none()
-            }
-        }
-    }
-
-    fn view(&self) -> Element<'_, Message> {
-        match self {
-            Self::Empty { name } => {
-                let create_button_message = (!name.is_empty()).then_some(Message::CreateProfile);
-                widget::column![
-                    widget::column![
-                        widget::text("New Profile - Empty"),
-                        widget::text_input("-Name-", name).on_input(|s| {
-                            Message::NewProfileMessage(NewProfileSubmenuMessage::TextFieldEditName(
-                                s,
-                            ))
-                        }),
-                    ]
-                    .spacing(8),
-                    widget::vertical_space(),
-                    widget::row![
-                        widget::button("Back").on_press(Message::ButtonNewProfilePressed),
-                        widget::horizontal_space(),
-                        widget::button("Create").on_press_maybe(create_button_message),
-                    ]
-                ]
-                .padding(5)
-                .into()
-            }
-        }
-    }
-}
 
 // Main Application
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
-    NewProfile(Option<NewProfileType>),
+    NewProfile(NewProfileSubmenu),
     ConfigureProfile,
-    Settings,
+    Settings(SettingsSubmenuData),
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)]
 pub enum Message {
+    Dummy(()),
     FetchedProfiles(Vec<Profile>),
     FetchedConfig(SBIConfig),
     LaunchedGame(SBILaunchStatus),
     CreateProfile,
+    CreateExecutable(String, PathBuf, Option<PathBuf>),
     SelectExecutable(String),
     ButtonSettingsPressed,
+    ButtonConfigureProfilePressed,
     ButtonLaunchPressed,
     ButtonExitSubmenuPressed,
     ButtonNewProfilePressed,
-    ButtonNewProfileEmptyPressed,
     ToggleDebug(bool),
     SelectProfile(usize),
-    #[allow(clippy::enum_variant_names)]
+    // Submenu messages
     NewProfileMessage(NewProfileSubmenuMessage),
+    SettingsMessage(SettingsSubmenuMessage),
 }
 
 #[derive(Debug, Clone)]
@@ -121,8 +68,12 @@ impl Application {
             selected_profile: None,
         }
     }
+    pub fn executables(&self) -> &rustc_hash::FxHashMap<String, Executable> {
+        &self.executables
+    }
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Dummy(()) => Task::none(),
             Message::FetchedProfiles(profiles) => {
                 log::info!("Fetched profiles using async tasks! ({})", profiles.len());
                 self.profiles = profiles;
@@ -142,15 +93,16 @@ impl Application {
                 Task::none()
             }
             Message::CreateProfile => {
-                if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_ref() {
+                if let Some(SubMenu::NewProfile(t)) = self.submenu.as_ref() {
                     let profile = match t {
-                        NewProfileType::Empty { name } => {
-                            log::info!("Creating new empty profile - {name}");
+                        NewProfileSubmenu { name, collection_id } => {
+                            let collection_id = (!collection_id.is_empty()).then_some(collection_id.clone());
+                            log::info!("Creating new profile - {name} : {collection_id:?}");
                             // Make a new profile with just a name
                             crate::profile::ProfileJson {
                                 name: name.clone(),
                                 additional_assets: None,
-                                collection_id: None,
+                                collection_id,
                             }
                         }
                     };
@@ -167,10 +119,24 @@ impl Application {
                         ),
                         Message::FetchedProfiles,
                     )
+
                 } else {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
                     Task::none()
                 }
+            }
+            Message::CreateExecutable(name, path, assets) => {
+                log::info!("Creating executable: {} from {} with {:?}", name, path.display(), assets);
+                let executables = {
+                    let mut executables = self.executables.clone();
+                    executables.insert(name, Executable { bin: path, assets });
+                    executables
+                };
+                let config = SBIConfig { executables, ..Default::default() };
+                let dir = self.dirs().data().to_path_buf();
+                let write_task = Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| Message::Dummy(()));
+                let read_task = Task::perform(config::load_config(dir), Message::FetchedConfig);
+                write_task.chain(read_task)
             }
             Message::ToggleDebug(state) => {
                 log::info!("Toggling debug: {}", state);
@@ -184,6 +150,11 @@ impl Application {
             }
             Message::ButtonSettingsPressed => {
                 log::info!("Settings was pressed");
+                self.submenu = Some(SubMenu::Settings(SettingsSubmenuData::new()));
+                Task::none()
+            }
+            Message::ButtonConfigureProfilePressed => {
+                log::info!("Configure Profile was pressed");
                 self.submenu = Some(SubMenu::ConfigureProfile);
                 Task::none()
             }
@@ -216,15 +187,8 @@ impl Application {
                 )
             }
             Message::ButtonNewProfilePressed => {
-                log::info!("New profile pressed...");
-                self.submenu = Some(SubMenu::NewProfile(None));
-                Task::none()
-            }
-            Message::ButtonNewProfileEmptyPressed => {
                 log::info!("New profile empty");
-                self.submenu = Some(SubMenu::NewProfile(Some(NewProfileType::Empty {
-                    name: String::from(""),
-                })));
+                self.submenu = Some(SubMenu::NewProfile(NewProfileSubmenu::new()));
                 Task::none()
             }
             Message::SelectProfile(i) => {
@@ -240,10 +204,17 @@ impl Application {
                 Task::none()
             }
             Message::NewProfileMessage(m) => {
-                if let Some(SubMenu::NewProfile(Some(t))) = self.submenu.as_mut() {
+                if let Some(SubMenu::NewProfile(t)) = self.submenu.as_mut() {
                     t.update(m)
                 } else {
                     log::error!("Error: Tried to send a NewProfile message while not in a valid NewProfile submenu");
+                    Task::none()
+                }
+            }
+            Message::SettingsMessage(m) => {
+                if let Some(SubMenu::Settings(s)) = self.submenu.as_mut() {
+                    s.update(m)
+                } else {
                     Task::none()
                 }
             }
@@ -259,23 +230,14 @@ impl Application {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        // Bottom Bar
-        let configure_profile_buttton_message = self
-            .selected_profile
-            .and_then(|p_i| self.profiles.get(p_i))
-            .filter(|p| !p.is_vanilla())
-            .map(|_p_i| Message::ButtonSettingsPressed);
-        let settings_button = widget::button("Configure Profile")
-            .on_press_maybe(configure_profile_buttton_message);
+        // Settings Button
+        let settings_button = widget::button("Settings").on_press(Message::ButtonSettingsPressed);
 
+        // New Profile Button
         let new_profile_button =
             widget::button("New Profile").on_press(Message::ButtonNewProfilePressed);
 
-        let launch_button_message = self
-            .selected_profile
-            .and(self.selected_executable.as_ref())
-            .map(|_p_i| Message::ButtonLaunchPressed);
-        let launch_button = widget::button("Launch").on_press_maybe(launch_button_message);
+        // Executable Picker
         let executables = Vec::from_iter(self.executables.keys().cloned());
         let executable_picker = widget::pick_list(
             executables,
@@ -283,39 +245,63 @@ impl Application {
             Message::SelectExecutable,
         )
         .placeholder("Select an executable...");
-        let debug_checkbox =
-            widget::checkbox("Debug", self.debug).on_toggle(Message::ToggleDebug);
 
-        let controls_right = widget::row![executable_picker, launch_button,].spacing(5);
+        // Debug Checkbox
+        let debug_checkbox = widget::checkbox("Debug", self.debug).on_toggle(Message::ToggleDebug);
+
+        // Top Bar
         let controls = widget::row![
             settings_button,
             new_profile_button,
+            executable_picker,
             debug_checkbox,
-            horizontal_space(),
-            controls_right,
         ]
         .spacing(5)
         .height(40)
         .align_y(Vertical::Center);
 
-        // Profiles Menu
-        let body = self.view_select_profile();
-        let content = widget::column![body, controls,].padding(5);
+        // Launch Button
+        let launch_button_message = self
+            .selected_profile
+            .and(self.selected_executable.as_ref())
+            .map(|_p_i| Message::ButtonLaunchPressed);
+
+        let launch_button = widget::button("Launch")
+            .on_press_maybe(launch_button_message)
+            .width(Length::Fill);
+
+        // Configure Profile Button
+        let configure_profile_buttton_message = self
+            .selected_profile
+            .and_then(|p_i| self.profiles.get(p_i))
+            .filter(|p| !p.is_vanilla())
+            .map(|_p_i| Message::ButtonConfigureProfilePressed);
+
+        let configure_profile_button = widget::button("Configure Profile")
+            .on_press_maybe(configure_profile_buttton_message)
+            .width(Length::Fill);
+
+        // Profile Configuration Panel
+        let profile_controls = widget::column![launch_button, configure_profile_button,]
+            .width(250)
+            .spacing(3)
+            .padding(Padding::new(5.0));
+
+        let maybe_profile_controls = self.selected_profile.map(|_i| profile_controls);
+
+        // Combine Profiles List, Profile Controls, Top Bar, and Popup Submenus
+        let body = widget::row![self.view_select_profile()].push_maybe(maybe_profile_controls);
+        let content = widget::column![controls, body,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
-                SubMenu::NewProfile(t) => match t {
-                    None => self.view_submenu_new_profile(),
-                    Some(t) => t.view(),
-                },
-                // SubMenu::NewProfileEmpty => self.view_submenu_new_profile_empty(),
+                SubMenu::NewProfile(t) => t.view(),
                 SubMenu::ConfigureProfile => self.view_submenu_configure_profile(),
-                SubMenu::Settings => self.view_submenu_settings(),
+                SubMenu::Settings(m) => m.view(&self),
             })
         });
-        let stacked_content =
-            widget::stack(std::iter::once(content.into())).push_maybe(popup);
+        let stacked_content = widget::stack(std::iter::once(content.into())).push_maybe(popup);
 
-        // Total content
+        // Enable Debug Overlay + return
         let content: Element<'_, Message> = stacked_content.into();
         if self.debug {
             content.explain(iced::Color::WHITE)
@@ -330,23 +316,24 @@ impl Application {
                 .selected_profile
                 .is_some_and(|p_i| p_i == i)
                 .then(|| iced::Color::from_rgba(0.3, 0.7, 0.2, 1.0));
-            let text = widget::column![
-                widget::text!("{}", p).width(Fill).color_maybe(text_color),
-                widget::horizontal_rule(2),
-            ];
+            let raw_text = widget::text!("{}", p)
+                .width(Fill)
+                .color_maybe(text_color)
+                .size(20);
+            let text = widget::column![raw_text, widget::horizontal_rule(2),];
             (
                 i,
                 mouse_area(text).on_press(Message::SelectProfile(i)).into(),
             )
         };
-        let profiles = self.profiles.iter().map(|p| p.name());
+        let profiles = self.profiles.iter().map(Profile::name);
         let profiles = widget::keyed_column(profiles.enumerate().map(profile_to_widget))
             .width(Length::Fill)
             .align_items(iced::Alignment::Start)
             .spacing(8);
-        widget::scrollable(profiles)
-            .height(Length::Fill)
-            .spacing(3)
+        let scrolling_profiles = widget::scrollable(profiles).height(Length::Fill).spacing(3);
+        widget::container(scrolling_profiles)
+            .width(Length::FillPortion(4))
             .into()
     }
 
@@ -400,22 +387,6 @@ impl Application {
         // .explain(iced::Color::from_rgb(1.0, 0.5, 0.0))
     }
 
-    fn view_submenu_new_profile(&self) -> Element<'_, Message> {
-        widget::column![
-            widget::column![
-                widget::text("New Profile"),
-                widget::button("Empty").on_press(Message::ButtonNewProfileEmptyPressed),
-                widget::button("Vanilla (Steam)"),
-                widget::button("Collection (Steam)"),
-            ]
-            .spacing(8),
-            widget::vertical_space(),
-            widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
-        ]
-        .padding(5)
-        .into()
-    }
-
     fn view_submenu_configure_profile(&self) -> Element<'_, Message> {
         widget::column![
             widget::column![widget::text("Configuring Profile"),].spacing(8),
@@ -424,9 +395,5 @@ impl Application {
         ]
         .padding(5)
         .into()
-    }
-
-    fn view_submenu_settings(&self) -> Element<'_, Message> {
-        widget::row![].into()
     }
 }

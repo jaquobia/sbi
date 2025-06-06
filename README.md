@@ -10,6 +10,8 @@ Sbi is in a very experimental state, so stability is not guaranteed and the fold
 - [x] Linking the vanilla starbound universe to a profile
 - [x] Determine plausible locations of the vanilla assets from the `%command%` parameter
 - [x] Reading executables from disk
+- [x] Adding executables through settings menu
+- [ ] Profile specific settings
 - [ ] Downloading and Updating executables for oSB and xSB from their respective repositories
 - [ ] Workshop and Collection support
 - [ ] *Maybe* a custom fork for just vanilla with the ability to disable the workshop.

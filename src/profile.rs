@@ -54,7 +54,7 @@ impl Profile {
     }
 
     //TODO: Reduce overhead somehow? Is this necessary?
-    pub fn additional_assets<'a>(&'a self) -> impl Iterator<Item=PathBuf> {
+    pub fn additional_assets(&self) -> impl Iterator<Item=PathBuf> {
         match &self.data {
             ProfileData::Json(json) => json.additional_assets.clone(),
             ProfileData::Vanilla => Some(vec![self.path.parent().expect("Starbound Vanilla Storage Location does not have a parent folder.").join("mods")]),
