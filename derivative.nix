@@ -37,12 +37,13 @@ pkgs.rustPlatform.buildRustPackage {
 	# RUSTFLAGS = "-C link-arg=-Wl,-rpath,${pkgs.lib.makeLibraryPath dlopenLibraries}";
 
 	postFixup = ''
-		patchelf $out/bin/sbi --add-rpath ${pkgs.lib.makeLibraryPath dlopenLibraries}
+		patchelf $out/bin/.sbi-wrapped --add-rpath ${pkgs.lib.makeLibraryPath dlopenLibraries}
 	'';
 
 	# Also a solid solution to fixing the dlopens
-	# postInstall = ''
-	# 	wrapProgram $out/bin/sbi \
-	# 	--prefix LD_LIBRARY_PATH : ${ pkgs.lib.makeLibraryPath [ libxkbcommon wayland vulkan-loader libGL ] }
-	# '';
+	# Using this to package SDL so xsb-static works.
+	postInstall = ''
+		wrapProgram $out/bin/sbi \
+		--prefix LD_LIBRARY_PATH : ${ pkgs.lib.makeLibraryPath [ pkgs.SDL2 ] }
+	'';
 }
