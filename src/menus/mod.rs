@@ -162,19 +162,18 @@ impl SettingsSubmenuData {
 
     pub fn view<'a>(&'a self, root: &'a Application) -> Element<'a, Message> {
         let selected = self.selected_executable;
-        let executable_to_element =
-            |(i, executable_name)| -> (usize, Element<'_, Message>) {
-                let color = selected
-                    .filter(|&selected| selected == i)
-                    .and(Some(iced::color!(0x00ff00)));
-                let clickable = widget::mouse_area(widget::row![
-                    widget::text(executable_name).color_maybe(color)
-                ])
-                .on_press(Message::SettingsMessage(
-                    SettingsSubmenuMessage::ClickExecutableListItem(i),
-                ));
-                (i, clickable.into())
-            };
+        let executable_to_element = |(i, executable_name)| -> (usize, Element<'_, Message>) {
+            let color = selected
+                .filter(|&selected| selected == i)
+                .and(Some(iced::color!(0x00ff00)));
+            let clickable = widget::mouse_area(widget::row![
+                widget::text(executable_name).color_maybe(color)
+            ])
+            .on_press(Message::SettingsMessage(
+                SettingsSubmenuMessage::ClickExecutableListItem(i),
+            ));
+            (i, clickable.into())
+        };
         let executables = widget::keyed_column(
             root.executables()
                 .keys()
@@ -186,17 +185,15 @@ impl SettingsSubmenuData {
             (self.new_executable_path.is_some() && !self.new_executable_name.is_empty()).then_some(
                 Message::SettingsMessage(SettingsSubmenuMessage::ClickAddExecutableButton),
             );
-        let remove_button_action =
-            self.selected_executable
-            .clone()
-            .map(|i| 
-                Message::SettingsMessage(
-                    SettingsSubmenuMessage::ClickRemoveExecutableButton(
-                        root.executables().keys().nth(i).expect("ERROR_MSG_UNLISTED_EXECUTABLE").to_owned()
-                    )
-                )
-            );
-            
+        let remove_button_action = self.selected_executable.clone().map(|i| {
+            Message::SettingsMessage(SettingsSubmenuMessage::ClickRemoveExecutableButton(
+                root.executables()
+                    .keys()
+                    .nth(i)
+                    .expect("ERROR_MSG_UNLISTED_EXECUTABLE")
+                    .to_owned(),
+            ))
+        });
 
         widget::column![
             widget::text("Settings"),

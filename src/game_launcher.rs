@@ -1,5 +1,5 @@
-use std::{path::PathBuf, process::Stdio};
 use serde_json::json;
+use std::{path::PathBuf, process::Stdio};
 
 use crate::{executable::Executable, profile::Profile, STARBOUND_BOOT_CONFIG_NAME};
 
@@ -9,10 +9,13 @@ const OS_LD_LIBRARY_NAME: &str = "LD_LIBRARY_PATH";
 pub enum SBILaunchStatus {
     Success,
     Failure,
-
 }
 
-pub async fn write_init_config(executable: &Executable, profile: &Profile, vanilla_assets: PathBuf) -> anyhow::Result<()> {
+pub async fn write_init_config(
+    executable: &Executable,
+    profile: &Profile,
+    vanilla_assets: PathBuf,
+) -> anyhow::Result<()> {
     let config_path = profile.path().join(STARBOUND_BOOT_CONFIG_NAME);
     log::info!("Vanilla assets dir: {}", vanilla_assets.display());
     let mut asset_directories: Vec<PathBuf> = vec![vanilla_assets];
@@ -47,8 +50,7 @@ async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::R
     let executable_folder = executable_path.parent().expect("").to_path_buf();
     let instance_dir = profile.path();
 
-    let new_ld_path_var = 
-    {
+    let new_ld_path_var = {
         let mut ld_paths = vec![executable_folder];
         if let Ok(system_ld_path) = std::env::var(OS_LD_LIBRARY_NAME) {
             ld_paths.extend(std::env::split_paths(&system_ld_path).map(PathBuf::from));
@@ -66,7 +68,7 @@ async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::R
         .to_string();
     // let bootconfig = ["./", STARBOUND_BOOT_CONFIG_NAME].join("");
     if let Some(path) = new_ld_path_var {
-        log::info!("Setting {OS_LD_LIBRARY_NAME} to {}",path.to_string_lossy());
+        log::info!("Setting {OS_LD_LIBRARY_NAME} to {}", path.to_string_lossy());
         command.env(OS_LD_LIBRARY_NAME, path);
     }
     command.args(["-bootconfig", &bootconfig]);
@@ -85,8 +87,11 @@ async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::R
     Ok(())
 }
 
-pub async fn launch_game(executable: Executable, profile: Profile, vanilla_assets: PathBuf) -> SBILaunchStatus {
-    
+pub async fn launch_game(
+    executable: Executable,
+    profile: Profile,
+    vanilla_assets: PathBuf,
+) -> SBILaunchStatus {
     if let Err(e) = write_init_config(&executable, &profile, vanilla_assets).await {
         log::error!("Error writing sbinit.config: {e}");
         return SBILaunchStatus::Failure;
@@ -97,5 +102,4 @@ pub async fn launch_game(executable: Executable, profile: Profile, vanilla_asset
         return SBILaunchStatus::Failure;
     }
     SBILaunchStatus::Success
-
 }

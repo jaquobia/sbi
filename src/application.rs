@@ -9,9 +9,15 @@ use iced::{
 };
 
 use crate::{
-    config::{self, write_config_to_disk, SBIConfig}, executable::Executable, game_launcher::{self, SBILaunchStatus}, menus::{NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage}, profile::Profile, SBIDirectories
+    config::{self, write_config_to_disk, SBIConfig},
+    executable::Executable,
+    game_launcher::{self, SBILaunchStatus},
+    menus::{
+        NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage,
+    },
+    profile::Profile,
+    SBIDirectories,
 };
-
 
 // Main Application
 
@@ -100,8 +106,12 @@ impl Application {
             Message::CreateProfile => {
                 if let Some(SubMenu::NewProfile(t)) = self.submenu.as_ref() {
                     let profile = match t {
-                        NewProfileSubmenu { name, collection_id } => {
-                            let collection_id = (!collection_id.is_empty()).then_some(collection_id.clone());
+                        NewProfileSubmenu {
+                            name,
+                            collection_id,
+                        } => {
+                            let collection_id =
+                                (!collection_id.is_empty()).then_some(collection_id.clone());
                             log::info!("Creating new profile - {name} : {collection_id:?}");
                             // Make a new profile with just a name
                             crate::profile::ProfileJson {
@@ -124,30 +134,43 @@ impl Application {
                         ),
                         Message::FetchedProfiles,
                     )
-
                 } else {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
                     Task::none()
                 }
             }
             Message::CreateExecutable(name, path, assets) => {
-                log::info!("Creating executable: {}\n\tPath: {}\n\tAssets: {:?}", name, path.display(), assets);
-                self.config.executables.insert(name, Executable { bin: path, assets });
+                log::info!(
+                    "Creating executable: {}\n\tPath: {}\n\tAssets: {:?}",
+                    name,
+                    path.display(),
+                    assets
+                );
+                self.config
+                    .executables
+                    .insert(name, Executable { bin: path, assets });
 
                 // let executables = self.executables.clone();
                 let config = self.config.clone();
                 let dir = self.dirs().data().to_path_buf();
-                let write_task = Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| Message::Dummy(()));
+                let write_task =
+                    Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| {
+                        Message::Dummy(())
+                    });
                 // let read_task = Task::perform(config::load_config(dir), Message::FetchedConfig);
                 write_task
-                    // .chain(read_task)
+                // .chain(read_task)
             }
             Message::RemoveExecutable(name) => {
-                self.selected_executable.take_if(|e| e.as_str().eq(name.as_str()));
+                self.selected_executable
+                    .take_if(|e| e.as_str().eq(name.as_str()));
                 self.config.executables.remove(&name);
                 let config = self.config.clone();
                 let dir = self.dirs().data().to_path_buf();
-                let write_task = Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| Message::Dummy(()));
+                let write_task =
+                    Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| {
+                        Message::Dummy(())
+                    });
                 write_task
             }
             Message::ToggleDebug(state) => {
@@ -159,7 +182,10 @@ impl Application {
                 log::info!("Selecting executable: {}", executable);
                 self.config.default_executable = Some(executable.clone());
                 self.selected_executable = Some(executable);
-                Task::perform(write_config_to_disk(self.dirs().data().to_path_buf(), self.config.clone()), |_| Message::Dummy(()))
+                Task::perform(
+                    write_config_to_disk(self.dirs().data().to_path_buf(), self.config.clone()),
+                    |_| Message::Dummy(()),
+                )
             }
             Message::ButtonSettingsPressed => {
                 log::info!("Settings was pressed");

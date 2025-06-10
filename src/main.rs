@@ -14,8 +14,8 @@ mod cli_args;
 mod config;
 mod executable;
 mod game_launcher;
-mod profile;
 mod menus;
+mod profile;
 
 static ORGANIZATION_QUALIFIER: &str = "";
 static ORGANIZATION_NAME: &str = "";
