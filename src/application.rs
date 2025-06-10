@@ -31,6 +31,7 @@ pub enum Message {
     LaunchedGame(SBILaunchStatus),
     CreateProfile,
     CreateExecutable(String, PathBuf, Option<PathBuf>),
+    RemoveExecutable(String),
     SelectExecutable(String),
     ButtonSettingsPressed,
     ButtonConfigureProfilePressed,
@@ -137,8 +138,17 @@ impl Application {
                 let config = self.config.clone();
                 let dir = self.dirs().data().to_path_buf();
                 let write_task = Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| Message::Dummy(()));
-                let read_task = Task::perform(config::load_config(dir), Message::FetchedConfig);
-                write_task.chain(read_task)
+                // let read_task = Task::perform(config::load_config(dir), Message::FetchedConfig);
+                write_task
+                    // .chain(read_task)
+            }
+            Message::RemoveExecutable(name) => {
+                self.selected_executable.take_if(|e| e.as_str().eq(name.as_str()));
+                self.config.executables.remove(&name);
+                let config = self.config.clone();
+                let dir = self.dirs().data().to_path_buf();
+                let write_task = Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| Message::Dummy(()));
+                write_task
             }
             Message::ToggleDebug(state) => {
                 log::info!("Toggling debug: {}", state);
