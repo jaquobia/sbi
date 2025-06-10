@@ -9,7 +9,7 @@ use iced::{
 };
 
 use crate::{
-    config::{self, SBIConfig}, executable::Executable, game_launcher::{self, SBILaunchStatus}, menus::{NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage}, profile::Profile, SBIDirectories
+    config::{self, write_config_to_disk, SBIConfig}, executable::Executable, game_launcher::{self, SBILaunchStatus}, menus::{NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage}, profile::Profile, SBIDirectories
 };
 
 
@@ -88,6 +88,11 @@ impl Application {
             Message::FetchedConfig(config) => {
                 // self.executables = config.executables;
                 self.config = config;
+                if let Some(name) = self.config.default_executable.as_ref() {
+                    if let Some(executable) = self.executables().get(name) {
+                        self.selected_executable = Some(name.clone())
+                    }
+                }
                 Task::none()
             }
             Message::LaunchedGame(status) => {
@@ -145,8 +150,9 @@ impl Application {
             }
             Message::SelectExecutable(executable) => {
                 log::info!("Selecting executable: {}", executable);
+                self.config.default_executable = Some(executable.clone());
                 self.selected_executable = Some(executable);
-                Task::none()
+                Task::perform(write_config_to_disk(self.dirs().data().to_path_buf(), self.config.clone()), |_| Message::Dummy(()))
             }
             Message::ButtonSettingsPressed => {
                 log::info!("Settings was pressed");
