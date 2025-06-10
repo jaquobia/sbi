@@ -75,9 +75,9 @@ pub enum SettingsSubmenuMessage {
     ClickRemoveExecutableButton,
     NewExecutableNameInput(String),
     ClickNewExecutableButton,
-    NewExecutableSelected(Option<(String, PathBuf)>),
+    NewExecutableSelected(Option<PathBuf>),
     ClickNewExecutableAssetsButton,
-    NewExecutableAssetsSelected(Option<(String, PathBuf)>),
+    NewExecutableAssetsSelected(Option<PathBuf>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -125,36 +125,36 @@ impl SettingsSubmenuData {
                 Task::none()
             }
             SettingsSubmenuMessage::ClickNewExecutableButton => {
-                async fn pick_executable() -> Option<(String, PathBuf)> {
+                async fn pick_executable() -> Option<PathBuf> {
                     let file: Option<rfd::FileHandle> =
                         rfd::AsyncFileDialog::new().pick_file().await;
-                    file.map(|f| (f.file_name(), f.path().to_path_buf()))
+                    file.map(|f| f.path().to_path_buf())
                 }
                 Task::perform(pick_executable(), |r| {
                     Message::SettingsMessage(SettingsSubmenuMessage::NewExecutableSelected(r))
                 })
             }
             SettingsSubmenuMessage::NewExecutableSelected(mby_file) => {
-                if let Some((name, path)) = mby_file {
+                if let Some(path) = mby_file {
                     log::info!("Picked file {}", path.display());
                     self.new_executable_path = Some(path);
                 }
                 Task::none()
             }
             SettingsSubmenuMessage::ClickNewExecutableAssetsButton => {
-                async fn pick_executable_assets() -> Option<(String, PathBuf)> {
+                async fn pick_executable_assets() -> Option<PathBuf> {
                     let file: Option<rfd::FileHandle> = rfd::AsyncFileDialog::new()
                         .add_filter("Pak", &["pak"])
                         .pick_file()
                         .await;
-                    file.map(|f| (f.file_name(), f.path().to_path_buf()))
+                    file.map(|f| f.path().to_path_buf())
                 }
                 Task::perform(pick_executable_assets(), |r| {
                     Message::SettingsMessage(SettingsSubmenuMessage::NewExecutableAssetsSelected(r))
                 })
             }
             SettingsSubmenuMessage::NewExecutableAssetsSelected(mby_file) => {
-                if let Some((name, path)) = mby_file {
+                if let Some(path) = mby_file {
                     log::info!("Picked file {}", path.display());
                     self.new_executable_assets = Some(path);
                 }
@@ -192,8 +192,8 @@ impl SettingsSubmenuData {
             );
         let remove_button_action = self
             .selected_executable
-            .clone()
-            .map(|i| Message::SettingsMessage(SettingsSubmenuMessage::ClickRemoveExecutableButton));
+            .as_ref()
+            .map(|_| Message::SettingsMessage(SettingsSubmenuMessage::ClickRemoveExecutableButton));
 
         widget::column![
             widget::text("Settings"),

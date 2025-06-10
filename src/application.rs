@@ -93,7 +93,7 @@ impl Application {
             Message::FetchedConfig(config) => {
                 self.config = config;
                 if let Some(name) = self.config.default_executable.as_ref() {
-                    if let Some(executable) = self.executables().get(name) {
+                    if self.executables().get(name).is_some() {
                         self.selected_executable = Some(name.clone())
                     }
                 }
@@ -165,6 +165,7 @@ impl Application {
                 self.selected_executable
                     .take_if(|e| e.as_str().eq(name.as_str()));
                 self.config.executables.remove(&name);
+                let _ = self.config.default_executable.take_if(|e|e.as_str().eq(name.as_str()));
                 let config = self.config.clone();
                 let dir = self.dirs().data().to_path_buf();
                 let write_task =
