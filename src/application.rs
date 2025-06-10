@@ -49,7 +49,6 @@ pub struct Application {
     dirs: SBIDirectories,
     profiles: Vec<Profile>,
     config: SBIConfig,
-    // executables: rustc_hash::FxHashMap<String, Executable>,
     debug: bool,
     submenu: Option<SubMenu>,
     selected_executable: Option<String>,
@@ -58,7 +57,6 @@ pub struct Application {
 
 impl Application {
     pub fn new(dirs: SBIDirectories) -> Self {
-        // let executables = rustc_hash::FxHashMap::default();
         Self {
             dirs,
             profiles: vec![],
@@ -86,7 +84,6 @@ impl Application {
                 Task::none()
             }
             Message::FetchedConfig(config) => {
-                // self.executables = config.executables;
                 self.config = config;
                 if let Some(name) = self.config.default_executable.as_ref() {
                     if let Some(executable) = self.executables().get(name) {
