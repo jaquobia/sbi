@@ -48,7 +48,8 @@ pub enum Message {
 pub struct Application {
     dirs: SBIDirectories,
     profiles: Vec<Profile>,
-    executables: rustc_hash::FxHashMap<String, Executable>,
+    config: SBIConfig,
+    // executables: rustc_hash::FxHashMap<String, Executable>,
     debug: bool,
     submenu: Option<SubMenu>,
     selected_executable: Option<String>,
@@ -57,11 +58,11 @@ pub struct Application {
 
 impl Application {
     pub fn new(dirs: SBIDirectories) -> Self {
-        let executables = rustc_hash::FxHashMap::default();
+        // let executables = rustc_hash::FxHashMap::default();
         Self {
             dirs,
             profiles: vec![],
-            executables,
+            config: SBIConfig::default(),
             debug: false,
             submenu: None,
             selected_executable: None,
@@ -69,7 +70,7 @@ impl Application {
         }
     }
     pub fn executables(&self) -> &rustc_hash::FxHashMap<String, Executable> {
-        &self.executables
+        &self.config.executables
     }
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
@@ -85,7 +86,8 @@ impl Application {
                 Task::none()
             }
             Message::FetchedConfig(config) => {
-                self.executables = config.executables;
+                // self.executables = config.executables;
+                self.config = config;
                 Task::none()
             }
             Message::LaunchedGame(status) => {
@@ -126,13 +128,11 @@ impl Application {
                 }
             }
             Message::CreateExecutable(name, path, assets) => {
-                log::info!("Creating executable: {} from {} with {:?}", name, path.display(), assets);
-                let executables = {
-                    let mut executables = self.executables.clone();
-                    executables.insert(name, Executable { bin: path, assets });
-                    executables
-                };
-                let config = SBIConfig { executables, ..Default::default() };
+                log::info!("Creating executable: {}\n\tPath: {}\n\tAssets: {:?}", name, path.display(), assets);
+                self.config.executables.insert(name, Executable { bin: path, assets });
+
+                // let executables = self.executables.clone();
+                let config = self.config.clone();
                 let dir = self.dirs().data().to_path_buf();
                 let write_task = Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| Message::Dummy(()));
                 let read_task = Task::perform(config::load_config(dir), Message::FetchedConfig);
@@ -177,7 +177,7 @@ impl Application {
                 let vanilla_assets = self.dirs().vanilla_assets().to_path_buf();
                 log::info!("Launching {} with {:?}", profile.name(), executable);
                 let executable = self
-                    .executables
+                    .executables()
                     .get(&executable)
                     .cloned()
                     .expect("No executable matching name?!");
@@ -238,7 +238,7 @@ impl Application {
             widget::button("New Profile").on_press(Message::ButtonNewProfilePressed);
 
         // Executable Picker
-        let executables = Vec::from_iter(self.executables.keys().cloned());
+        let executables = Vec::from_iter(self.executables().keys().cloned());
         let executable_picker = widget::pick_list(
             executables,
             self.selected_executable.clone(),
