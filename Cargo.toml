@@ -8,7 +8,6 @@ edition = "2021"
 
 [dependencies]
 # GUI Toolkit
-# features = ["auto-detect-theme"] is an expensive feature
 iced = { version = "0.13", features = ["tokio"] }
 rfd = { version = "0.15.3" }
 

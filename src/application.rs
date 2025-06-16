@@ -77,6 +77,13 @@ impl Application {
     pub fn executables(&self) -> &rustc_hash::FxHashMap<String, Executable> {
         &self.config.executables
     }
+    fn write_config_task(&self) -> Task<Message> {
+        let config = self.config.clone();
+        let dir = self.dirs().data().to_path_buf();
+        Task::perform(config::write_config_to_disk(dir, config), |_| {
+            Message::Dummy(())
+        })
+    }
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Dummy(()) => Task::none(),
@@ -104,25 +111,24 @@ impl Application {
                 Task::none()
             }
             Message::CreateProfile => {
-                if let Some(SubMenu::NewProfile(t)) = self.submenu.as_ref() {
-                    let profile = match t {
-                        NewProfileSubmenu {
+                if let Some(SubMenu::NewProfile(t)) = self.submenu.take() {
+                    let profile = {
+                        let NewProfileSubmenu {
                             name,
                             collection_id,
-                        } => {
-                            let collection_id =
-                                (!collection_id.is_empty()).then_some(collection_id.clone());
-                            log::info!("Creating new profile - {name} : {collection_id:?}");
-                            // Make a new profile with just a name
-                            crate::profile::ProfileJson {
-                                name: name.clone(),
-                                additional_assets: None,
-                                collection_id,
-                            }
+                        } = t;
+                        let collection_id =
+                            (!collection_id.is_empty()).then(|| collection_id.clone());
+                        log::info!("Creating new profile - {name} : {collection_id:?}");
+                        // Make a new profile with just a name
+                        crate::profile::ProfileJson {
+                            name: name.clone(),
+                            additional_assets: None,
+                            collection_id,
+                            link_mods: false,
                         }
                     };
 
-                    self.submenu = None;
                     let profiles_dir = self.dirs().profiles().to_path_buf();
                     let maybe_vanilla_profile_dir =
                         self.dirs().vanilla_storage().map(PathBuf::from);
@@ -149,30 +155,17 @@ impl Application {
                 self.config
                     .executables
                     .insert(name, Executable { bin: path, assets });
-
-                // let executables = self.executables.clone();
-                let config = self.config.clone();
-                let dir = self.dirs().data().to_path_buf();
-                let write_task =
-                    Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| {
-                        Message::Dummy(())
-                    });
-                // let read_task = Task::perform(config::load_config(dir), Message::FetchedConfig);
-                write_task
-                // .chain(read_task)
+                self.write_config_task()
             }
             Message::RemoveExecutable(name) => {
                 self.selected_executable
                     .take_if(|e| e.as_str().eq(name.as_str()));
                 self.config.executables.remove(&name);
-                let _ = self.config.default_executable.take_if(|e|e.as_str().eq(name.as_str()));
-                let config = self.config.clone();
-                let dir = self.dirs().data().to_path_buf();
-                let write_task =
-                    Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| {
-                        Message::Dummy(())
-                    });
-                write_task
+                let _ = self
+                    .config
+                    .default_executable
+                    .take_if(|e| e.as_str().eq(name.as_str()));
+                self.write_config_task()
             }
             Message::ToggleDebug(state) => {
                 log::info!("Toggling debug: {}", state);
@@ -183,10 +176,7 @@ impl Application {
                 log::info!("Selecting executable: {}", executable);
                 self.config.default_executable = Some(executable.clone());
                 self.selected_executable = Some(executable);
-                Task::perform(
-                    write_config_to_disk(self.dirs().data().to_path_buf(), self.config.clone()),
-                    |_| Message::Dummy(()),
-                )
+                self.write_config_task()
             }
             Message::ButtonSettingsPressed => {
                 log::info!("Settings was pressed");
