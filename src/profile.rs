@@ -15,6 +15,7 @@ pub struct ProfileJson {
     pub name: String,
     pub additional_assets: Option<Vec<PathBuf>>,
     pub collection_id: Option<String>,
+    #[serde(default)]
     pub link_mods: bool,
 }
 
