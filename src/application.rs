@@ -190,6 +190,7 @@ impl Application {
                     .cloned()
                     .expect("No executable selected?!");
                 let vanilla_assets = self.dirs().vanilla_assets().to_path_buf();
+                let vanilla_mods = self.dirs().vanilla_mods().map(|p| p.to_path_buf());
                 log::info!("Launching {} with {:?}", profile.name(), executable);
                 let executable = self
                     .executables()
@@ -197,7 +198,7 @@ impl Application {
                     .cloned()
                     .expect("No executable matching name?!");
                 Task::perform(
-                    game_launcher::launch_game(executable, profile, vanilla_assets),
+                    game_launcher::launch_game(executable, profile, vanilla_mods, vanilla_assets),
                     Message::LaunchedGame,
                 )
             }

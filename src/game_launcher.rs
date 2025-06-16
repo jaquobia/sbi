@@ -14,14 +14,28 @@ pub enum SBILaunchStatus {
 pub async fn write_init_config(
     executable: &Executable,
     profile: &Profile,
+    vanilla_mods: Option<PathBuf>,
     vanilla_assets: PathBuf,
 ) -> anyhow::Result<()> {
     let config_path = profile.path().join(STARBOUND_BOOT_CONFIG_NAME);
     log::info!("Vanilla assets dir: {}", vanilla_assets.display());
+    log::info!("Vanilla mods dir: {:?}", vanilla_mods);
+    log::info!(
+        "Attempting to write sbinit.config to: {}",
+        config_path.display()
+    );
     let mut asset_directories: Vec<PathBuf> = vec![vanilla_assets];
     asset_directories.extend(executable.assets());
     asset_directories.extend(profile.additional_assets());
+    if let Some(p) = vanilla_mods.filter(|p| p.exists() && profile.link_mods()) {
+        asset_directories.push(p);
+    }
     let storage_directory = profile.path();
+    if !storage_directory.exists() {
+        if let Err(e) = tokio::fs::create_dir_all(storage_directory).await {
+            log::error!("Failed to create missing storage directory: {e}");
+        }
+    }
 
     // TODO: Find a way to either configure these or determine a reasonable default
     let allow_admin_commands_from_anyone: bool = false;
@@ -90,9 +104,10 @@ async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::R
 pub async fn launch_game(
     executable: Executable,
     profile: Profile,
+    vanilla_mods: Option<PathBuf>,
     vanilla_assets: PathBuf,
 ) -> SBILaunchStatus {
-    if let Err(e) = write_init_config(&executable, &profile, vanilla_assets).await {
+    if let Err(e) = write_init_config(&executable, &profile, vanilla_mods, vanilla_assets).await {
         log::error!("Error writing sbinit.config: {e}");
         return SBILaunchStatus::Failure;
     }
