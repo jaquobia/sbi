@@ -15,7 +15,7 @@ use crate::{
     menus::{
         NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage,
     },
-    profile::Profile,
+    profile::{Profile, ProfileJson},
     SBIDirectories,
 };
 
@@ -35,7 +35,7 @@ pub enum Message {
     FetchedProfiles(Vec<Profile>),
     FetchedConfig(SBIConfig),
     LaunchedGame(SBILaunchStatus),
-    CreateProfile,
+    CreateProfile(ProfileJson),
     CreateExecutable(String, PathBuf, Option<PathBuf>),
     RemoveExecutable(String),
     SelectExecutable(String),
@@ -110,40 +110,25 @@ impl Application {
                 log::info!("Launched Game: {status:?}");
                 Task::none()
             }
-            Message::CreateProfile => {
-                if let Some(SubMenu::NewProfile(t)) = self.submenu.take() {
-                    let profile = {
-                        let NewProfileSubmenu {
-                            name,
-                            collection_id,
-                        } = t;
-                        let collection_id =
-                            (!collection_id.is_empty()).then(|| collection_id.clone());
-                        log::info!("Creating new profile - {name} : {collection_id:?}");
-                        // Make a new profile with just a name
-                        crate::profile::ProfileJson {
-                            name: name.clone(),
-                            additional_assets: None,
-                            collection_id,
-                            link_mods: false,
-                        }
-                    };
-
-                    let profiles_dir = self.dirs().profiles().to_path_buf();
-                    let maybe_vanilla_profile_dir =
-                        self.dirs().vanilla_storage().map(PathBuf::from);
-                    Task::perform(
-                        crate::profile::create_profile_then_find_list(
-                            profile,
-                            profiles_dir,
-                            maybe_vanilla_profile_dir,
-                        ),
-                        Message::FetchedProfiles,
-                    )
-                } else {
+            Message::CreateProfile(profile) => {
+                log::info!(
+                    "Creating new profile - {} : {:?}",
+                    profile.name,
+                    profile.collection_id
+                );
+                let profiles_dir = self.dirs().profiles().to_path_buf();
+                let maybe_vanilla_profile_dir = self.dirs().vanilla_storage().map(PathBuf::from);
+                if let None = self.submenu.take() {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
-                    Task::none()
                 }
+                Task::perform(
+                    crate::profile::create_profile_then_find_list(
+                        profile,
+                        profiles_dir,
+                        maybe_vanilla_profile_dir,
+                    ),
+                    Message::FetchedProfiles,
+                )
             }
             Message::CreateExecutable(name, path, assets) => {
                 log::info!(

@@ -10,12 +10,15 @@ use crate::application::{Application, Message};
 pub enum NewProfileSubmenuMessage {
     TextFieldEditName(String),
     TextFieldEditCollectionID(String),
+    ToggleLinkMods(bool),
+    CreateProfile,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NewProfileSubmenu {
     pub name: String,
     pub collection_id: String,
+    pub link_mods: bool,
 }
 
 impl NewProfileSubmenu {
@@ -23,6 +26,7 @@ impl NewProfileSubmenu {
         Self {
             name: String::from(""),
             collection_id: String::from(""),
+            link_mods: false,
         }
     }
 
@@ -36,11 +40,31 @@ impl NewProfileSubmenu {
                 self.collection_id = s;
                 Task::none()
             }
+            NewProfileSubmenuMessage::ToggleLinkMods(b) => {
+                self.link_mods = b;
+                Task::none()
+            }
+            NewProfileSubmenuMessage::CreateProfile => {
+                let profile = {
+                    let collection_id =
+                        (!self.collection_id.is_empty()).then(|| self.collection_id.clone());
+                    // Make a new profile with just a name
+                    crate::profile::ProfileJson {
+                        name: self.name.clone(),
+                        additional_assets: None,
+                        collection_id,
+                        link_mods: false,
+                    }
+                };
+                Task::done(Message::CreateProfile(profile))
+            }
         }
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let create_button_message = (!self.name.is_empty()).then_some(Message::CreateProfile);
+        let create_button_message = (!self.name.is_empty()).then_some(Message::NewProfileMessage(
+            NewProfileSubmenuMessage::CreateProfile,
+        ));
         widget::column![
             widget::column![
                 widget::text("New Profile"),
@@ -52,6 +76,8 @@ impl NewProfileSubmenu {
                         s,
                     ))
                 }),
+                widget::checkbox("Link vanilla mods folder", self.link_mods)
+                    .on_toggle(|b| Message::NewProfileMessage(NewProfileSubmenuMessage::ToggleLinkMods(b)))
             ]
             .spacing(8),
             widget::vertical_space(),
