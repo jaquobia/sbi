@@ -14,8 +14,8 @@ mod cli_args;
 mod config;
 mod executable;
 mod game_launcher;
-mod profile;
 mod menus;
+mod profile;
 
 static ORGANIZATION_QUALIFIER: &str = "";
 static ORGANIZATION_NAME: &str = "";
@@ -80,6 +80,7 @@ struct SBIDirectories {
     profiles_directory: PathBuf,
     vanilla_assets: PathBuf,
     vanilla_storage: Option<PathBuf>,
+    vanilla_mods: Option<PathBuf>,
 }
 
 impl SBIDirectories {
@@ -132,13 +133,15 @@ impl SBIDirectories {
                 .ok_or(SBIDirectoryError::NoVanillaAssetsDirectory)?
         };
 
-        let vanilla_storage = starbound_steam_dir.map(|d| d.join("storage"));
+        let vanilla_storage = starbound_steam_dir.as_ref().map(|d| d.join("storage"));
+        let vanilla_mods = starbound_steam_dir.map(|d| d.join("mods"));
 
         Ok(Self {
             data_directory: data_dir,
             profiles_directory: profiles_dir,
             vanilla_assets,
             vanilla_storage,
+            vanilla_mods,
         })
     }
 
@@ -156,6 +159,10 @@ impl SBIDirectories {
 
     pub fn vanilla_storage(&self) -> Option<&Path> {
         self.vanilla_storage.as_deref()
+    }
+
+    pub fn vanilla_mods(&self) -> Option<&Path> {
+        self.vanilla_mods.as_deref()
     }
 }
 

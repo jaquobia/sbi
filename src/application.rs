@@ -9,16 +9,23 @@ use iced::{
 };
 
 use crate::{
-    config::{self, SBIConfig}, executable::Executable, game_launcher::{self, SBILaunchStatus}, menus::{NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage}, profile::Profile, SBIDirectories
+    config::{self, write_config_to_disk, SBIConfig},
+    executable::Executable,
+    game_launcher::{self, SBILaunchStatus},
+    menus::{
+        ConfigureProfileSubmenuData, ConfigureProfileSubmenuMessage, NewProfileSubmenu,
+        NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage,
+    },
+    profile::{self, Profile, ProfileData, ProfileJson},
+    SBIDirectories,
 };
-
 
 // Main Application
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
     NewProfile(NewProfileSubmenu),
-    ConfigureProfile,
+    ConfigureProfile(ConfigureProfileSubmenuData),
     Settings(SettingsSubmenuData),
 }
 
@@ -29,8 +36,11 @@ pub enum Message {
     FetchedProfiles(Vec<Profile>),
     FetchedConfig(SBIConfig),
     LaunchedGame(SBILaunchStatus),
-    CreateProfile,
+    CreateProfile(ProfileJson),
+    ModifyCurrentProfile(ProfileJson),
+    DeleteCurrentProfile,
     CreateExecutable(String, PathBuf, Option<PathBuf>),
+    RemoveExecutable(String),
     SelectExecutable(String),
     ButtonSettingsPressed,
     ButtonConfigureProfilePressed,
@@ -42,13 +52,14 @@ pub enum Message {
     // Submenu messages
     NewProfileMessage(NewProfileSubmenuMessage),
     SettingsMessage(SettingsSubmenuMessage),
+    ConfigureProfileMessage(ConfigureProfileSubmenuMessage),
 }
 
 #[derive(Debug, Clone)]
 pub struct Application {
     dirs: SBIDirectories,
     profiles: Vec<Profile>,
-    executables: rustc_hash::FxHashMap<String, Executable>,
+    config: SBIConfig,
     debug: bool,
     submenu: Option<SubMenu>,
     selected_executable: Option<String>,
@@ -57,11 +68,10 @@ pub struct Application {
 
 impl Application {
     pub fn new(dirs: SBIDirectories) -> Self {
-        let executables = rustc_hash::FxHashMap::default();
         Self {
             dirs,
             profiles: vec![],
-            executables,
+            config: SBIConfig::default(),
             debug: false,
             submenu: None,
             selected_executable: None,
@@ -69,7 +79,24 @@ impl Application {
         }
     }
     pub fn executables(&self) -> &rustc_hash::FxHashMap<String, Executable> {
-        &self.executables
+        &self.config.executables
+    }
+    pub fn current_profile(&self) -> Option<&Profile> {
+        self.selected_profile
+            .map(|p| self.profiles.get(p))
+            .flatten()
+    }
+    pub fn current_profile_mut(&mut self) -> Option<&mut Profile> {
+        self.selected_profile
+            .map(|p| self.profiles.get_mut(p))
+            .flatten()
+    }
+    fn write_config_task(&self) -> Task<Message> {
+        let config = self.config.clone();
+        let dir = self.dirs().data().to_path_buf();
+        Task::perform(config::write_config_to_disk(dir, config), |_| {
+            Message::Dummy(())
+        })
     }
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
@@ -85,58 +112,88 @@ impl Application {
                 Task::none()
             }
             Message::FetchedConfig(config) => {
-                self.executables = config.executables;
+                self.config = config;
+                if let Some(name) = self.config.default_executable.as_ref() {
+                    if self.executables().get(name).is_some() {
+                        self.selected_executable = Some(name.clone())
+                    }
+                }
                 Task::none()
             }
             Message::LaunchedGame(status) => {
                 log::info!("Launched Game: {status:?}");
                 Task::none()
             }
-            Message::CreateProfile => {
-                if let Some(SubMenu::NewProfile(t)) = self.submenu.as_ref() {
-                    let profile = match t {
-                        NewProfileSubmenu { name, collection_id } => {
-                            let collection_id = (!collection_id.is_empty()).then_some(collection_id.clone());
-                            log::info!("Creating new profile - {name} : {collection_id:?}");
-                            // Make a new profile with just a name
-                            crate::profile::ProfileJson {
-                                name: name.clone(),
-                                additional_assets: None,
-                                collection_id,
-                            }
-                        }
-                    };
-
-                    self.submenu = None;
-                    let profiles_dir = self.dirs().profiles().to_path_buf();
-                    let maybe_vanilla_profile_dir =
-                        self.dirs().vanilla_storage().map(PathBuf::from);
-                    Task::perform(
-                        crate::profile::create_profile_then_find_list(
-                            profile,
-                            profiles_dir,
-                            maybe_vanilla_profile_dir,
-                        ),
-                        Message::FetchedProfiles,
-                    )
-
-                } else {
+            Message::CreateProfile(profile) => {
+                log::info!(
+                    "Creating new profile - {} : {:?}",
+                    profile.name,
+                    profile.collection_id
+                );
+                let profiles_dir = self.dirs().profiles().to_path_buf();
+                let maybe_vanilla_profile_dir = self.dirs().vanilla_storage().map(PathBuf::from);
+                if let None = self.submenu.take() {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
+                }
+                Task::perform(
+                    crate::profile::create_profile_then_find_list(
+                        profile,
+                        profiles_dir,
+                        maybe_vanilla_profile_dir,
+                    ),
+                    Message::FetchedProfiles,
+                )
+            }
+            Message::ModifyCurrentProfile(json) => {
+                log::info!("Modifying current profile...");
+                if let Some(profile) = self.current_profile_mut() {
+                    profile.set_json(json);
+                    Task::perform(profile::write_profile(profile.clone()), |_| {
+                        Message::Dummy(())
+                    })
+                } else {
+                    log::error!("Trying to write data without a selected profile!!");
+                    Task::none()
+                }
+            }
+            Message::DeleteCurrentProfile => {
+                if let Some(profile) = self.current_profile() {
+                    log::warn!("Deleting profile {}", profile.path().display());
+                    let delete_path = profile.path().to_owned();
+                    if let Some(p) = self.selected_profile.as_ref() {
+                        self.profiles.remove(*p);
+                    }
+                    Task::perform(tokio::fs::remove_dir_all(delete_path), |_| {
+                        Message::Dummy(())
+                    })
+                } else {
+                    log::error!(
+                        "Attempting to delete a profile without having a profile selected!!"
+                    );
                     Task::none()
                 }
             }
             Message::CreateExecutable(name, path, assets) => {
-                log::info!("Creating executable: {} from {} with {:?}", name, path.display(), assets);
-                let executables = {
-                    let mut executables = self.executables.clone();
-                    executables.insert(name, Executable { bin: path, assets });
-                    executables
-                };
-                let config = SBIConfig { executables, ..Default::default() };
-                let dir = self.dirs().data().to_path_buf();
-                let write_task = Task::perform(config::write_config_to_disk(dir.to_owned(), config), |_| Message::Dummy(()));
-                let read_task = Task::perform(config::load_config(dir), Message::FetchedConfig);
-                write_task.chain(read_task)
+                log::info!(
+                    "Creating executable: {}\n\tPath: {}\n\tAssets: {:?}",
+                    name,
+                    path.display(),
+                    assets
+                );
+                self.config
+                    .executables
+                    .insert(name, Executable { bin: path, assets });
+                self.write_config_task()
+            }
+            Message::RemoveExecutable(name) => {
+                self.selected_executable
+                    .take_if(|e| e.as_str().eq(name.as_str()));
+                self.config.executables.remove(&name);
+                let _ = self
+                    .config
+                    .default_executable
+                    .take_if(|e| e.as_str().eq(name.as_str()));
+                self.write_config_task()
             }
             Message::ToggleDebug(state) => {
                 log::info!("Toggling debug: {}", state);
@@ -145,8 +202,9 @@ impl Application {
             }
             Message::SelectExecutable(executable) => {
                 log::info!("Selecting executable: {}", executable);
+                self.config.default_executable = Some(executable.clone());
                 self.selected_executable = Some(executable);
-                Task::none()
+                self.write_config_task()
             }
             Message::ButtonSettingsPressed => {
                 log::info!("Settings was pressed");
@@ -155,7 +213,19 @@ impl Application {
             }
             Message::ButtonConfigureProfilePressed => {
                 log::info!("Configure Profile was pressed");
-                self.submenu = Some(SubMenu::ConfigureProfile);
+                if let Some(profile) = self
+                    .selected_profile
+                    .map(|p| self.profiles.get(p))
+                    .flatten()
+                    .map(|p| p.json())
+                    .flatten()
+                {
+                    self.submenu = Some(SubMenu::ConfigureProfile(
+                        ConfigureProfileSubmenuData::new(profile),
+                    ));
+                } else {
+                    log::error!("Opened Configure Profile menu without a valid profile selected!!");
+                }
                 Task::none()
             }
             Message::ButtonExitSubmenuPressed => {
@@ -175,14 +245,15 @@ impl Application {
                     .cloned()
                     .expect("No executable selected?!");
                 let vanilla_assets = self.dirs().vanilla_assets().to_path_buf();
+                let vanilla_mods = self.dirs().vanilla_mods().map(|p| p.to_path_buf());
                 log::info!("Launching {} with {:?}", profile.name(), executable);
                 let executable = self
-                    .executables
+                    .executables()
                     .get(&executable)
                     .cloned()
                     .expect("No executable matching name?!");
                 Task::perform(
-                    game_launcher::launch_game(executable, profile, vanilla_assets),
+                    game_launcher::launch_game(executable, profile, vanilla_mods, vanilla_assets),
                     Message::LaunchedGame,
                 )
             }
@@ -218,6 +289,13 @@ impl Application {
                     Task::none()
                 }
             }
+            Message::ConfigureProfileMessage(m) => {
+                if let Some(SubMenu::ConfigureProfile(s)) = self.submenu.as_mut() {
+                    s.update(m)
+                } else {
+                    Task::none()
+                }
+            }
         }
     }
 
@@ -238,7 +316,7 @@ impl Application {
             widget::button("New Profile").on_press(Message::ButtonNewProfilePressed);
 
         // Executable Picker
-        let executables = Vec::from_iter(self.executables.keys().cloned());
+        let executables = Vec::from_iter(self.executables().keys().cloned());
         let executable_picker = widget::pick_list(
             executables,
             self.selected_executable.clone(),
@@ -294,8 +372,8 @@ impl Application {
         let content = widget::column![controls, body,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
-                SubMenu::NewProfile(t) => t.view(),
-                SubMenu::ConfigureProfile => self.view_submenu_configure_profile(),
+                SubMenu::NewProfile(m) => m.view(),
+                SubMenu::ConfigureProfile(m) => m.view(&self),
                 SubMenu::Settings(m) => m.view(&self),
             })
         });
@@ -385,15 +463,5 @@ impl Application {
             .on_press(Message::ButtonExitSubmenuPressed),
         )
         // .explain(iced::Color::from_rgb(1.0, 0.5, 0.0))
-    }
-
-    fn view_submenu_configure_profile(&self) -> Element<'_, Message> {
-        widget::column![
-            widget::column![widget::text("Configuring Profile"),].spacing(8),
-            widget::vertical_space(),
-            widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
-        ]
-        .padding(5)
-        .into()
     }
 }

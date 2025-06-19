@@ -7,14 +7,16 @@ use crate::PROFILE_JSON_NAME;
 #[derive(Debug, Clone)]
 pub enum ProfileData {
     Vanilla,
-    Json(ProfileJson)
+    Json(ProfileJson),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProfileJson {
     pub name: String,
     pub additional_assets: Option<Vec<PathBuf>>,
     pub collection_id: Option<String>,
+    #[serde(default)]
+    pub link_mods: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -49,16 +51,39 @@ impl Profile {
         }
     }
 
+    pub fn json(&self) -> Option<&ProfileJson> {
+        match &self.data {
+            ProfileData::Json(j) => Some(j),
+            ProfileData::Vanilla => None,
+        }
+    }
+
+    pub fn set_json(&mut self, json: ProfileJson) {
+        match &mut self.data {
+            ProfileData::Json(j) => *j = json,
+            ProfileData::Vanilla => log::error!("Trying to write json data to vanilla profile!"),
+        }
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     //TODO: Reduce overhead somehow? Is this necessary?
-    pub fn additional_assets(&self) -> impl Iterator<Item=PathBuf> {
+    pub fn additional_assets(&self) -> impl Iterator<Item = PathBuf> {
         match &self.data {
             ProfileData::Json(json) => json.additional_assets.clone(),
-            ProfileData::Vanilla => Some(vec![self.path.parent().expect("Starbound Vanilla Storage Location does not have a parent folder.").join("mods")]),
-        }.into_iter().flatten()
+            ProfileData::Vanilla => None,
+        }
+        .into_iter()
+        .flatten()
+    }
+
+    pub fn link_mods(&self) -> bool {
+        match &self.data {
+            ProfileData::Json(json) => json.link_mods,
+            ProfileData::Vanilla => true,
+        }
     }
 
     pub fn is_vanilla(&self) -> bool {
@@ -68,10 +93,15 @@ impl Profile {
 
 /// Returns a collection of all valid profiles in the profiles directory.
 /// A valid profile consists of a folder in the profiles directory which contains a valid json.
-pub async fn find_profiles(profiles_directory: std::path::PathBuf, maybe_vanilla_profile_directory: Option<std::path::PathBuf>) -> Vec<Profile> {
+pub async fn find_profiles(
+    profiles_directory: std::path::PathBuf,
+    maybe_vanilla_profile_directory: Option<std::path::PathBuf>,
+) -> Vec<Profile> {
     let paths = crate::profile::collect_profile_json_paths(&profiles_directory);
     match paths {
-        Ok(paths) => crate::profile::parse_profile_paths_to_json(&paths, maybe_vanilla_profile_directory),
+        Ok(paths) => {
+            crate::profile::parse_profile_paths_to_json(&paths, maybe_vanilla_profile_directory)
+        }
         Err(e) => {
             log::error!("Error gathering profiles: {e}");
             vec![]
@@ -80,8 +110,13 @@ pub async fn find_profiles(profiles_directory: std::path::PathBuf, maybe_vanilla
 }
 
 /// Turns instance.json into Instance struct
-fn parse_profile_paths_to_json(instance_json_paths: &[PathBuf], maybe_vanilla_profile_directory: Option<std::path::PathBuf>) -> Vec<Profile> {
-    let vanilla_profile = maybe_vanilla_profile_directory.into_iter().map(Profile::from_vanilla);
+fn parse_profile_paths_to_json(
+    instance_json_paths: &[PathBuf],
+    maybe_vanilla_profile_directory: Option<std::path::PathBuf>,
+) -> Vec<Profile> {
+    let vanilla_profile = maybe_vanilla_profile_directory
+        .into_iter()
+        .map(Profile::from_vanilla);
     let sbi_profiles = instance_json_paths
         .iter()
         .map(|ins_path| std::fs::read_to_string(ins_path).map(|str| (str, ins_path.clone())))
@@ -104,14 +139,18 @@ fn collect_profile_json_paths(profiles_dir: &std::path::Path) -> std::io::Result
     Ok(instances)
 }
 
-pub async fn write_profile_then_find_list(p: Profile, profiles_directory: std::path::PathBuf, maybe_vanilla_profile_directory: Option<std::path::PathBuf>) -> Vec<Profile> {
+pub async fn write_profile_then_find_list(
+    p: Profile,
+    profiles_directory: std::path::PathBuf,
+    maybe_vanilla_profile_directory: Option<std::path::PathBuf>,
+) -> Vec<Profile> {
     if let Err(e) = write_profile(p).await {
         log::error!("Error while writing profile to disk: {e}");
     }
     find_profiles(profiles_directory, maybe_vanilla_profile_directory).await
 }
 
-async fn write_profile(p: Profile) -> std::io::Result<()> {
+pub async fn write_profile(p: Profile) -> std::io::Result<()> {
     if let ProfileData::Json(json) = &p.data {
         tokio::fs::create_dir_all(&p.path).await?;
         let instance_data = serde_json::to_vec(json)?;
@@ -120,9 +159,16 @@ async fn write_profile(p: Profile) -> std::io::Result<()> {
     Ok(())
 }
 
-pub async fn create_profile_then_find_list(p: ProfileJson, profiles_directory: std::path::PathBuf, maybe_vanilla_profile_directory: Option<std::path::PathBuf>) -> Vec<Profile> {
+pub async fn create_profile_then_find_list(
+    p: ProfileJson,
+    profiles_directory: std::path::PathBuf,
+    maybe_vanilla_profile_directory: Option<std::path::PathBuf>,
+) -> Vec<Profile> {
     let profile_path = find_valid_profile_path(&p.name, &profiles_directory).await;
-    let p = Profile { path: profile_path, data: ProfileData::Json(p) };
+    let p = Profile {
+        path: profile_path,
+        data: ProfileData::Json(p),
+    };
     write_profile_then_find_list(p, profiles_directory, maybe_vanilla_profile_directory).await
 }
 

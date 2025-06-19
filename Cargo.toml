@@ -4,11 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [profile.release]
-# lto = true
+lto = false
 
 [dependencies]
 # GUI Toolkit
-# features = ["auto-detect-theme"] is an expensive feature
 iced = { version = "0.13", features = ["tokio"] }
 rfd = { version = "0.15.3" }
 
