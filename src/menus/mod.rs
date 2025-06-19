@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use iced::{widget, Element, Task};
 
-use crate::application::{Application, Message};
+use crate::{
+    application::{Application, Message},
+    profile::{Profile, ProfileJson},
+};
 
 // New Profile Submenu
 
@@ -76,8 +79,9 @@ impl NewProfileSubmenu {
                         s,
                     ))
                 }),
-                widget::checkbox("Link vanilla mods folder", self.link_mods)
-                    .on_toggle(|b| Message::NewProfileMessage(NewProfileSubmenuMessage::ToggleLinkMods(b)))
+                widget::checkbox("Link vanilla mods folder", self.link_mods).on_toggle(|b| {
+                    Message::NewProfileMessage(NewProfileSubmenuMessage::ToggleLinkMods(b))
+                })
             ]
             .spacing(8),
             widget::vertical_space(),
@@ -256,6 +260,55 @@ impl SettingsSubmenuData {
             widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
         ]
         .spacing(5)
+        .padding(5)
+        .into()
+    }
+}
+
+// Configure Profile Submenu
+
+#[derive(Debug, Clone)]
+pub enum ConfigureProfileSubmenuMessage {
+    ToggleLinkModsCheckbox(bool),
+    SaveAndExit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConfigureProfileSubmenuData {
+    profile_copy: ProfileJson,
+}
+
+impl ConfigureProfileSubmenuData {
+    pub fn new(original: &ProfileJson) -> Self {
+        Self {
+            profile_copy: original.clone(),
+        }
+    }
+
+    pub fn update(&mut self, m: ConfigureProfileSubmenuMessage) -> Task<Message> {
+        type M = ConfigureProfileSubmenuMessage;
+        match m {
+            M::ToggleLinkModsCheckbox(b) => {
+                self.profile_copy.link_mods = b;
+                Task::none()
+            }
+            M::SaveAndExit => Task::done(Message::ModifyCurrentProfile(self.profile_copy.clone())),
+        }
+    }
+
+    pub fn view<'a>(&'a self, root: &'a Application) -> Element<'a, Message> {
+        type M = ConfigureProfileSubmenuMessage;
+        widget::column![
+            widget::column![widget::text("Configuring Profile"),].spacing(8),
+            widget::checkbox("Link mods", self.profile_copy.link_mods)
+                .on_toggle(|b| Message::ConfigureProfileMessage(M::ToggleLinkModsCheckbox(b))),
+            widget::vertical_space(),
+            widget::row![
+                widget::button("Close").on_press(Message::ButtonExitSubmenuPressed),
+                widget::horizontal_space(),
+                widget::button("Save").on_press(Message::ConfigureProfileMessage(M::SaveAndExit)),
+            ]
+        ]
         .padding(5)
         .into()
     }

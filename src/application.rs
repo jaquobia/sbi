@@ -13,9 +13,10 @@ use crate::{
     executable::Executable,
     game_launcher::{self, SBILaunchStatus},
     menus::{
-        NewProfileSubmenu, NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage,
+        ConfigureProfileSubmenuData, ConfigureProfileSubmenuMessage, NewProfileSubmenu,
+        NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage,
     },
-    profile::{Profile, ProfileJson},
+    profile::{self, Profile, ProfileData, ProfileJson},
     SBIDirectories,
 };
 
@@ -24,7 +25,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
     NewProfile(NewProfileSubmenu),
-    ConfigureProfile,
+    ConfigureProfile(ConfigureProfileSubmenuData),
     Settings(SettingsSubmenuData),
 }
 
@@ -36,6 +37,7 @@ pub enum Message {
     FetchedConfig(SBIConfig),
     LaunchedGame(SBILaunchStatus),
     CreateProfile(ProfileJson),
+    ModifyCurrentProfile(ProfileJson),
     CreateExecutable(String, PathBuf, Option<PathBuf>),
     RemoveExecutable(String),
     SelectExecutable(String),
@@ -49,6 +51,7 @@ pub enum Message {
     // Submenu messages
     NewProfileMessage(NewProfileSubmenuMessage),
     SettingsMessage(SettingsSubmenuMessage),
+    ConfigureProfileMessage(ConfigureProfileSubmenuMessage),
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +79,16 @@ impl Application {
     }
     pub fn executables(&self) -> &rustc_hash::FxHashMap<String, Executable> {
         &self.config.executables
+    }
+    pub fn current_profile(&self) -> Option<&Profile> {
+        self.selected_profile
+            .map(|p| self.profiles.get(p))
+            .flatten()
+    }
+    pub fn current_profile_mut(&mut self) -> Option<&mut Profile> {
+        self.selected_profile
+            .map(|p| self.profiles.get_mut(p))
+            .flatten()
     }
     fn write_config_task(&self) -> Task<Message> {
         let config = self.config.clone();
@@ -130,6 +143,16 @@ impl Application {
                     Message::FetchedProfiles,
                 )
             }
+            Message::ModifyCurrentProfile(json) => {
+                log::info!("Modifying current profile...");
+                if let Some(profile) = self.current_profile_mut() {
+                    profile.set_json(json);
+                    Task::perform(profile::write_profile(profile.clone()), |_| Message::Dummy(()))
+                } else {
+                    log::error!("Trying to write data without a selected profile!!");
+                    Task::none()
+                }
+            }
             Message::CreateExecutable(name, path, assets) => {
                 log::info!(
                     "Creating executable: {}\n\tPath: {}\n\tAssets: {:?}",
@@ -170,7 +193,19 @@ impl Application {
             }
             Message::ButtonConfigureProfilePressed => {
                 log::info!("Configure Profile was pressed");
-                self.submenu = Some(SubMenu::ConfigureProfile);
+                if let Some(profile) = self
+                    .selected_profile
+                    .map(|p| self.profiles.get(p))
+                    .flatten()
+                    .map(|p| p.json())
+                    .flatten()
+                {
+                    self.submenu = Some(SubMenu::ConfigureProfile(
+                        ConfigureProfileSubmenuData::new(profile),
+                    ));
+                } else {
+                    log::error!("Opened Configure Profile menu without a valid profile selected!!");
+                }
                 Task::none()
             }
             Message::ButtonExitSubmenuPressed => {
@@ -229,6 +264,13 @@ impl Application {
             }
             Message::SettingsMessage(m) => {
                 if let Some(SubMenu::Settings(s)) = self.submenu.as_mut() {
+                    s.update(m)
+                } else {
+                    Task::none()
+                }
+            }
+            Message::ConfigureProfileMessage(m) => {
+                if let Some(SubMenu::ConfigureProfile(s)) = self.submenu.as_mut() {
                     s.update(m)
                 } else {
                     Task::none()
@@ -310,8 +352,8 @@ impl Application {
         let content = widget::column![controls, body,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
-                SubMenu::NewProfile(t) => t.view(),
-                SubMenu::ConfigureProfile => self.view_submenu_configure_profile(),
+                SubMenu::NewProfile(m) => m.view(),
+                SubMenu::ConfigureProfile(m) => m.view(&self),
                 SubMenu::Settings(m) => m.view(&self),
             })
         });
@@ -401,15 +443,5 @@ impl Application {
             .on_press(Message::ButtonExitSubmenuPressed),
         )
         // .explain(iced::Color::from_rgb(1.0, 0.5, 0.0))
-    }
-
-    fn view_submenu_configure_profile(&self) -> Element<'_, Message> {
-        widget::column![
-            widget::column![widget::text("Configuring Profile"),].spacing(8),
-            widget::vertical_space(),
-            widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
-        ]
-        .padding(5)
-        .into()
     }
 }

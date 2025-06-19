@@ -10,7 +10,7 @@ pub enum ProfileData {
     Json(ProfileJson),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProfileJson {
     pub name: String,
     pub additional_assets: Option<Vec<PathBuf>>,
@@ -48,6 +48,20 @@ impl Profile {
         match &self.data {
             ProfileData::Json(json) => &json.name,
             ProfileData::Vanilla => "Default",
+        }
+    }
+
+    pub fn json(&self) -> Option<&ProfileJson> {
+        match &self.data {
+            ProfileData::Json(j) => Some(j),
+            ProfileData::Vanilla => None,
+        }
+    }
+
+    pub fn set_json(&mut self, json: ProfileJson) {
+        match &mut self.data {
+            ProfileData::Json(j) => *j = json,
+            ProfileData::Vanilla => log::error!("Trying to write json data to vanilla profile!"),
         }
     }
 
@@ -136,7 +150,7 @@ pub async fn write_profile_then_find_list(
     find_profiles(profiles_directory, maybe_vanilla_profile_directory).await
 }
 
-async fn write_profile(p: Profile) -> std::io::Result<()> {
+pub async fn write_profile(p: Profile) -> std::io::Result<()> {
     if let ProfileData::Json(json) = &p.data {
         tokio::fs::create_dir_all(&p.path).await?;
         let instance_data = serde_json::to_vec(json)?;
