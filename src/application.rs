@@ -38,6 +38,7 @@ pub enum Message {
     LaunchedGame(SBILaunchStatus),
     CreateProfile(ProfileJson),
     ModifyCurrentProfile(ProfileJson),
+    DeleteCurrentProfile,
     CreateExecutable(String, PathBuf, Option<PathBuf>),
     RemoveExecutable(String),
     SelectExecutable(String),
@@ -147,9 +148,28 @@ impl Application {
                 log::info!("Modifying current profile...");
                 if let Some(profile) = self.current_profile_mut() {
                     profile.set_json(json);
-                    Task::perform(profile::write_profile(profile.clone()), |_| Message::Dummy(()))
+                    Task::perform(profile::write_profile(profile.clone()), |_| {
+                        Message::Dummy(())
+                    })
                 } else {
                     log::error!("Trying to write data without a selected profile!!");
+                    Task::none()
+                }
+            }
+            Message::DeleteCurrentProfile => {
+                if let Some(profile) = self.current_profile() {
+                    log::warn!("Deleting profile {}", profile.path().display());
+                    let delete_path = profile.path().to_owned();
+                    if let Some(p) = self.selected_profile.as_ref() {
+                        self.profiles.remove(*p);
+                    }
+                    Task::perform(tokio::fs::remove_dir_all(delete_path), |_| {
+                        Message::Dummy(())
+                    })
+                } else {
+                    log::error!(
+                        "Attempting to delete a profile without having a profile selected!!"
+                    );
                     Task::none()
                 }
             }

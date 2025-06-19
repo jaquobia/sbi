@@ -270,6 +270,7 @@ impl SettingsSubmenuData {
 #[derive(Debug, Clone)]
 pub enum ConfigureProfileSubmenuMessage {
     ToggleLinkModsCheckbox(bool),
+    Delete,
     SaveAndExit,
 }
 
@@ -292,6 +293,8 @@ impl ConfigureProfileSubmenuData {
                 self.profile_copy.link_mods = b;
                 Task::none()
             }
+            M::Delete => Task::done(Message::DeleteCurrentProfile)
+                .chain(Task::done(Message::ButtonExitSubmenuPressed)),
             M::SaveAndExit => Task::done(Message::ModifyCurrentProfile(self.profile_copy.clone())),
         }
     }
@@ -305,6 +308,8 @@ impl ConfigureProfileSubmenuData {
             widget::vertical_space(),
             widget::row![
                 widget::button("Close").on_press(Message::ButtonExitSubmenuPressed),
+                widget::horizontal_space(),
+                widget::button("Delete").on_press(Message::ConfigureProfileMessage(M::Delete)),
                 widget::horizontal_space(),
                 widget::button("Save").on_press(Message::ConfigureProfileMessage(M::SaveAndExit)),
             ]
