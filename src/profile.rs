@@ -17,6 +17,7 @@ pub struct ProfileJson {
     pub collection_id: Option<String>,
     #[serde(default)]
     pub link_mods: bool,
+    pub selected_executable: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,11 +58,24 @@ impl Profile {
             ProfileData::Vanilla => None,
         }
     }
+    pub fn json_mut(&mut self) -> Option<&mut ProfileJson> {
+        match &mut self.data {
+            ProfileData::Json(j) => Some(j),
+            ProfileData::Vanilla => None,
+        }
+    }
 
     pub fn set_json(&mut self, json: ProfileJson) {
         match &mut self.data {
             ProfileData::Json(j) => *j = json,
             ProfileData::Vanilla => log::error!("Trying to write json data to vanilla profile!"),
+        }
+    }
+
+    pub fn clear_selected_executable(&mut self) {
+        match &mut self.data {
+            ProfileData::Json(json) => json.selected_executable = None,
+            ProfileData::Vanilla => log::warn!("Clearing selected executable of vanilla profile does nothing... and this branch should have never been called"),
         }
     }
 
@@ -83,6 +97,13 @@ impl Profile {
         match &self.data {
             ProfileData::Json(json) => json.link_mods,
             ProfileData::Vanilla => true,
+        }
+    }
+
+    pub fn selected_executable(&self) -> Option<&str> {
+        match &self.data {
+            ProfileData::Json(json) => json.selected_executable.as_deref(),
+            ProfileData::Vanilla => None,
         }
     }
 

@@ -12,10 +12,10 @@ pub enum SBILaunchStatus {
 }
 
 pub async fn write_init_config(
-    executable: &Executable,
     profile: &Profile,
     vanilla_mods: Option<PathBuf>,
     vanilla_assets: PathBuf,
+    executable_assets: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let config_path = profile.path().join(STARBOUND_BOOT_CONFIG_NAME);
     log::info!("Vanilla assets dir: {}", vanilla_assets.display());
@@ -25,7 +25,7 @@ pub async fn write_init_config(
         config_path.display()
     );
     let mut asset_directories: Vec<PathBuf> = vec![vanilla_assets];
-    asset_directories.extend(executable.assets());
+    asset_directories.extend(executable_assets);
     asset_directories.extend(profile.additional_assets());
     if let Some(p) = vanilla_mods.filter(|p| p.exists() && profile.link_mods()) {
         asset_directories.push(p);
@@ -107,7 +107,7 @@ pub async fn launch_game(
     vanilla_mods: Option<PathBuf>,
     vanilla_assets: PathBuf,
 ) -> SBILaunchStatus {
-    if let Err(e) = write_init_config(&executable, &profile, vanilla_mods, vanilla_assets).await {
+    if let Err(e) = write_init_config(&profile, vanilla_mods, vanilla_assets, executable.assets()).await {
         log::error!("Error writing sbinit.config: {e}");
         return SBILaunchStatus::Failure;
     }

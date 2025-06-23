@@ -57,6 +57,7 @@ impl NewProfileSubmenu {
                         additional_assets: None,
                         collection_id,
                         link_mods: false,
+                        selected_executable: None,
                     }
                 };
                 Task::done(Message::CreateProfile(profile))

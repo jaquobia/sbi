@@ -6,6 +6,8 @@ let
 		vulkan-headers
 		vulkan-loader
 		libGL
+		libGLU
+		SDL2
 	];
 in
 pkgs.mkShell {
@@ -22,7 +24,7 @@ pkgs.mkShell {
 
 	env = {
 		RUST_BACKTRACE="1"; # full
-		# LD_LIBRARY_PATH = libPath;
+		LD_LIBRARY_PATH = libPath;
 		RUSTFLAGS = "-C link-arg=-Wl,-rpath,${libPath}";
 	};
 }
