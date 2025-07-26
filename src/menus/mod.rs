@@ -7,6 +7,9 @@ use crate::{
     profile::{Profile, ProfileJson},
 };
 
+pub mod rename_profile;
+pub mod duplicate_profile;
+
 // New Profile Submenu
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -272,7 +275,6 @@ impl SettingsSubmenuData {
 pub enum ConfigureProfileSubmenuMessage {
     ToggleLinkModsCheckbox(bool),
     Delete,
-    SaveAndExit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -292,11 +294,10 @@ impl ConfigureProfileSubmenuData {
         match m {
             M::ToggleLinkModsCheckbox(b) => {
                 self.profile_copy.link_mods = b;
-                Task::none()
+                Task::done(Message::ModifyCurrentProfile(self.profile_copy.clone()))
             }
             M::Delete => Task::done(Message::DeleteCurrentProfile)
                 .chain(Task::done(Message::ButtonExitSubmenuPressed)),
-            M::SaveAndExit => Task::done(Message::ModifyCurrentProfile(self.profile_copy.clone())),
         }
     }
 
@@ -311,8 +312,6 @@ impl ConfigureProfileSubmenuData {
                 widget::button("Close").on_press(Message::ButtonExitSubmenuPressed),
                 widget::horizontal_space(),
                 widget::button("Delete").on_press(Message::ConfigureProfileMessage(M::Delete)),
-                widget::horizontal_space(),
-                widget::button("Save").on_press(Message::ConfigureProfileMessage(M::SaveAndExit)),
             ]
         ]
         .padding(5)

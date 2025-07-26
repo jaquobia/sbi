@@ -13,6 +13,8 @@ use crate::{
     executable::Executable,
     game_launcher::{self, SBILaunchStatus},
     menus::{
+        duplicate_profile::{DuplicateData, DuplicateSubmenuData, DuplicateSubmenuMessage},
+        rename_profile::{RenameSubmenuData, RenameSubmenuMessage},
         ConfigureProfileSubmenuData, ConfigureProfileSubmenuMessage, NewProfileSubmenu,
         NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage,
     },
@@ -27,6 +29,8 @@ enum SubMenu {
     NewProfile(NewProfileSubmenu),
     ConfigureProfile(ConfigureProfileSubmenuData),
     Settings(SettingsSubmenuData),
+    RenameProfile(RenameSubmenuData),
+    DuplicateProfile(DuplicateSubmenuData),
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +42,8 @@ pub enum Message {
     LaunchedGame(SBILaunchStatus),
     CreateProfile(ProfileJson),
     ModifyCurrentProfile(ProfileJson),
+    RenameCurrentProfile(String),
+    DuplicateCurrentProfile(DuplicateData),
     DeleteCurrentProfile,
     CreateExecutable(String, PathBuf, Option<PathBuf>),
     RemoveExecutable(String),
@@ -47,12 +53,16 @@ pub enum Message {
     ButtonLaunchPressed,
     ButtonExitSubmenuPressed,
     ButtonNewProfilePressed,
+    ButtonRenamePressed,
+    ButtonDuplicatePressed,
     ToggleDebug(bool),
     SelectProfile(usize),
     // Submenu messages
     NewProfileMessage(NewProfileSubmenuMessage),
     SettingsMessage(SettingsSubmenuMessage),
     ConfigureProfileMessage(ConfigureProfileSubmenuMessage),
+    RenameProfileMessage(RenameSubmenuMessage),
+    DuplicateProfileMessage(DuplicateSubmenuMessage),
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +194,39 @@ impl Application {
                     Task::none()
                 }
             }
+            Message::RenameCurrentProfile(name) => {
+                if let Some(profile) = self.current_profile_mut() {
+                    if let Some(json) = profile.json_mut() {
+                        json.name = name;
+                        Task::perform(profile::write_profile(profile.clone()), |_| {
+                            Message::Dummy(())
+                        })
+                    } else {
+                        // non-vanilla/default profiles do not have json
+                        Task::none()
+                    }
+                } else {
+                    Task::none()
+                }
+            }
+            Message::DuplicateCurrentProfile(data) => {
+                if let Some(current_profile) = self.current_profile().cloned() {
+                    let profiles_dir = self.dirs().profiles().to_path_buf();
+                    let maybe_vanilla_profile_dir =
+                        self.dirs().vanilla_storage().map(PathBuf::from);
+                    Task::perform(
+                        crate::profile::duplicate_profile_then_find_list(
+                            current_profile,
+                            data,
+                            profiles_dir,
+                            maybe_vanilla_profile_dir,
+                        ),
+                        Message::FetchedProfiles,
+                    )
+                } else {
+                    Task::none()
+                }
+            }
             Message::DeleteCurrentProfile => {
                 if let Some(profile) = self.current_profile() {
                     log::warn!("Deleting profile {}", profile.path().display());
@@ -297,6 +340,24 @@ impl Application {
                 self.submenu = Some(SubMenu::NewProfile(NewProfileSubmenu::new()));
                 Task::none()
             }
+            Message::ButtonRenamePressed => {
+                log::info!("Rename profile");
+                if let Some(profile) = self.current_profile() {
+                    self.submenu = Some(SubMenu::RenameProfile(RenameSubmenuData::new(
+                        profile.name(),
+                    )));
+                }
+                Task::none()
+            }
+            Message::ButtonDuplicatePressed => {
+                log::info!("Duplicate profile");
+                if let Some(profile) = self.current_profile() {
+                    self.submenu = Some(SubMenu::DuplicateProfile(DuplicateSubmenuData::new(
+                        profile.name(),
+                    )));
+                }
+                Task::none()
+            }
             Message::SelectProfile(i) => {
                 match self.profiles.get(i) {
                     Some(name) => {
@@ -326,6 +387,20 @@ impl Application {
             }
             Message::ConfigureProfileMessage(m) => {
                 if let Some(SubMenu::ConfigureProfile(s)) = self.submenu.as_mut() {
+                    s.update(m)
+                } else {
+                    Task::none()
+                }
+            }
+            Message::RenameProfileMessage(m) => {
+                if let Some(SubMenu::RenameProfile(s)) = self.submenu.as_mut() {
+                    s.update(m)
+                } else {
+                    Task::none()
+                }
+            }
+            Message::DuplicateProfileMessage(m) => {
+                if let Some(SubMenu::DuplicateProfile(s)) = self.submenu.as_mut() {
                     s.update(m)
                 } else {
                     Task::none()
@@ -389,12 +464,24 @@ impl Application {
             )
             .placeholder("Select an executable...");
 
+            // Rename button
+            let rename_profile_button =
+                widget::button("Rename").on_press(Message::ButtonRenamePressed);
+            // Duplicate button
+            let duplicate_profile_button =
+                widget::button("Duplicate").on_press(Message::ButtonDuplicatePressed);
+
             // Profile Configuration Panel
-            let profile_controls =
-                widget::column![launch_button, configure_profile_button, executable_picker,]
-                    .width(250)
-                    .spacing(3)
-                    .padding(Padding::new(5.0));
+            let profile_controls = widget::column![
+                launch_button,
+                configure_profile_button,
+                executable_picker,
+                rename_profile_button,
+                duplicate_profile_button
+            ]
+            .width(250)
+            .spacing(3)
+            .padding(Padding::new(5.0));
 
             self.selected_profile.map(|_i| profile_controls)
         } else {
@@ -409,6 +496,8 @@ impl Application {
                 SubMenu::NewProfile(m) => m.view(),
                 SubMenu::ConfigureProfile(m) => m.view(&self),
                 SubMenu::Settings(m) => m.view(&self),
+                SubMenu::RenameProfile(m) => m.view(&self).map(|m| m.into()),
+                SubMenu::DuplicateProfile(m) => m.view(&self).map(|m| m.into()),
             })
         });
         let stacked_content = widget::stack(std::iter::once(content.into())).push_maybe(popup);
