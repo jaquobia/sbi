@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 /// - XStarbound - will enable the removal of automatic UGC loading through the ```-noworkshop``` flag  
 /// - OpenStarbound - will enable the removal of automatic UGC loading through the ```"includeUGC": false``` field in sbinit.config
 /// - Vanilla - has no current method for disabling UGC content
+//TODO: Impement onto executables, this is currently unused
+#[allow(dead_code)]
 pub enum ExecutableVariant {
     XStarbound,
     OpenStarbound,

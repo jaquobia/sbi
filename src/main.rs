@@ -189,13 +189,12 @@ fn main() -> Result<(), SBIInitializationError> {
         .run_with(move || {
             (
                 application,
-                Task::batch([
+                Task::perform(config::load_config(data_dir), Message::FetchedConfig).chain(
                     Task::perform(
                         profile::find_profiles(profiles_dir, vanilla_profile_dir),
                         Message::FetchedProfiles,
                     ),
-                    Task::perform(config::load_config(data_dir), Message::FetchedConfig),
-                ]),
+                ),
             )
         })?;
     Ok(())

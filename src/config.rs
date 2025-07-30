@@ -8,6 +8,8 @@ use crate::{executable::Executable, SBI_CONFIG_JSON_NAME};
 pub struct SBIConfig {
     pub executables: rustc_hash::FxHashMap<String, Executable>,
     pub default_executable: Option<String>,
+    #[serde(default)]
+    pub close_on_launch: bool,
 }
 
 /// Load config from disk at `dir/config.json`

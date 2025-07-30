@@ -6,11 +6,14 @@ let
 		vulkan-headers
 		vulkan-loader
 		libGL
+		libGLU
+		SDL2
 	];
 in
 pkgs.mkShell {
 	nativeBuildInputs = with pkgs; [
 		cargo
+		clippy
 		rustc
 		rustfmt
 		rust-analyzer
@@ -22,7 +25,7 @@ pkgs.mkShell {
 
 	env = {
 		RUST_BACKTRACE="1"; # full
-		# LD_LIBRARY_PATH = libPath;
+		LD_LIBRARY_PATH = libPath;
 		RUSTFLAGS = "-C link-arg=-Wl,-rpath,${libPath}";
 	};
 }

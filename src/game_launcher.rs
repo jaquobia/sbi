@@ -11,11 +11,16 @@ pub enum SBILaunchStatus {
     Failure,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct SBILaunchSettings {
+    pub close_on_launch: bool,
+}
+
 pub async fn write_init_config(
-    executable: &Executable,
     profile: &Profile,
     vanilla_mods: Option<PathBuf>,
     vanilla_assets: PathBuf,
+    executable_assets: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let config_path = profile.path().join(STARBOUND_BOOT_CONFIG_NAME);
     log::info!("Vanilla assets dir: {}", vanilla_assets.display());
@@ -25,7 +30,7 @@ pub async fn write_init_config(
         config_path.display()
     );
     let mut asset_directories: Vec<PathBuf> = vec![vanilla_assets];
-    asset_directories.extend(executable.assets());
+    asset_directories.extend(executable_assets);
     asset_directories.extend(profile.additional_assets());
     if let Some(p) = vanilla_mods.filter(|p| p.exists() && profile.link_mods()) {
         asset_directories.push(p);
@@ -59,7 +64,11 @@ pub async fn write_init_config(
     Ok(())
 }
 
-async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::Result<()> {
+async fn lauch_game_inner(
+    executable: Executable,
+    profile: Profile,
+    launch_settings: SBILaunchSettings,
+) -> anyhow::Result<()> {
     let executable_path = executable.bin;
     let executable_folder = executable_path.parent().expect("").to_path_buf();
     let instance_dir = profile.path();
@@ -67,7 +76,7 @@ async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::R
     let new_ld_path_var = {
         let mut ld_paths = vec![executable_folder];
         if let Ok(system_ld_path) = std::env::var(OS_LD_LIBRARY_NAME) {
-            ld_paths.extend(std::env::split_paths(&system_ld_path).map(PathBuf::from));
+            ld_paths.extend(std::env::split_paths(&system_ld_path));
         }
         std::env::join_paths(ld_paths).ok()
     };
@@ -94,10 +103,12 @@ async fn lauch_game_inner(executable: Executable, profile: Profile) -> anyhow::R
 
     // This async thread is not necessary as we don't want to own children
     // but this also causes no harm
-    command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+    command.stdout(Stdio::null()).stderr(Stdio::null());
     // tokio::task::spawn(async move {  });
-    let exit_status = command.spawn()?.wait().await?;
-    log::info!("{}", exit_status);
+    let _child = command.spawn()?;
+    if launch_settings.close_on_launch {
+        std::process::exit(0);
+    }
     Ok(())
 }
 
@@ -106,13 +117,16 @@ pub async fn launch_game(
     profile: Profile,
     vanilla_mods: Option<PathBuf>,
     vanilla_assets: PathBuf,
+    launch_settings: SBILaunchSettings,
 ) -> SBILaunchStatus {
-    if let Err(e) = write_init_config(&executable, &profile, vanilla_mods, vanilla_assets).await {
+    if let Err(e) =
+        write_init_config(&profile, vanilla_mods, vanilla_assets, executable.assets()).await
+    {
         log::error!("Error writing sbinit.config: {e}");
         return SBILaunchStatus::Failure;
     }
 
-    if let Err(e) = lauch_game_inner(executable, profile).await {
+    if let Err(e) = lauch_game_inner(executable, profile, launch_settings).await {
         log::error!("Error while launching executable: {e}");
         return SBILaunchStatus::Failure;
     }
