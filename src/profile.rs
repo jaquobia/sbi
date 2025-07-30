@@ -223,14 +223,13 @@ pub async fn duplicate_profile_then_find_list(
         }
         // Duplicating vanilla profile
         ProfileData::Vanilla => {
-            let json = ProfileJson {
+            ProfileJson {
                 name: data.name,
                 additional_assets: None,
                 collection_id: None,
                 link_mods: true,
                 selected_executable: None,
-            };
-            json
+            }
         }
     };
     let new_profile_path = find_valid_profile_path(&json.name, &profiles_directory).await;

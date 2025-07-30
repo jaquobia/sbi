@@ -67,6 +67,32 @@ pub enum Message {
     DuplicateProfileMessage(DuplicateSubmenuMessage),
 }
 
+impl From<NewProfileSubmenuMessage> for Message {
+    fn from(val: NewProfileSubmenuMessage) -> Message {
+        Message::NewProfileMessage(val)
+    }
+}
+impl From<SettingsSubmenuMessage> for Message {
+    fn from(val: SettingsSubmenuMessage) -> Message {
+        Message::SettingsMessage(val)
+    }
+}
+impl From<ConfigureProfileSubmenuMessage> for Message {
+    fn from(val: ConfigureProfileSubmenuMessage) -> Message {
+        Message::ConfigureProfileMessage(val)
+    }
+}
+impl From<RenameSubmenuMessage> for Message {
+    fn from(val: RenameSubmenuMessage) -> Message {
+        Message::RenameProfileMessage(val)
+    }
+}
+impl From<DuplicateSubmenuMessage> for Message {
+    fn from(val: DuplicateSubmenuMessage) -> Message {
+        Message::DuplicateProfileMessage(val)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Application {
     dirs: SBIDirectories,
@@ -95,14 +121,10 @@ impl Application {
         &self.config
     }
     pub fn current_profile(&self) -> Option<&Profile> {
-        self.selected_profile
-            .map(|p| self.profiles.get(p))
-            .flatten()
+        self.selected_profile.and_then(|p| self.profiles.get(p))
     }
     pub fn current_profile_mut(&mut self) -> Option<&mut Profile> {
-        self.selected_profile
-            .map(|p| self.profiles.get_mut(p))
-            .flatten()
+        self.selected_profile.and_then(|p| self.profiles.get_mut(p))
     }
 
     fn find_profiles_with_invalidated_executables(
@@ -150,7 +172,7 @@ impl Application {
 
                 let profiles_dir = self.dirs().profiles().to_path_buf();
                 let vanilla_profile_dir = self.dirs().vanilla_storage().map(PathBuf::from);
-                if write_tasks.len() > 0 {
+                if !write_tasks.is_empty() {
                     Task::batch(write_tasks).chain(Task::perform(
                         profile::find_profiles(profiles_dir, vanilla_profile_dir),
                         Message::FetchedProfiles,
@@ -175,7 +197,7 @@ impl Application {
                 );
                 let profiles_dir = self.dirs().profiles().to_path_buf();
                 let maybe_vanilla_profile_dir = self.dirs().vanilla_storage().map(PathBuf::from);
-                if let None = self.submenu.take() {
+                if self.submenu.take().is_none() {
                     log::error!("Tried to create a profile while not in a create-profile screen!");
                 }
                 Task::perform(
@@ -307,10 +329,8 @@ impl Application {
                 log::info!("Configure Profile was pressed");
                 if let Some(profile) = self
                     .selected_profile
-                    .map(|p| self.profiles.get(p))
-                    .flatten()
-                    .map(|p| p.json())
-                    .flatten()
+                    .and_then(|p| self.profiles.get(p))
+                    .and_then(|p| p.json())
                 {
                     self.submenu = Some(SubMenu::ConfigureProfile(
                         ConfigureProfileSubmenuData::new(profile),
@@ -459,7 +479,7 @@ impl Application {
             // Launch Button
             let launch_button_message = selected_executable
                 .is_some()
-                .then(|| Message::ButtonLaunchPressed);
+                .then_some(Message::ButtonLaunchPressed);
 
             let launch_button = widget::button("Launch")
                 .on_press_maybe(launch_button_message)
@@ -467,7 +487,7 @@ impl Application {
 
             // Configure Profile Button
             let configure_profile_buttton_message =
-                (!profile.is_vanilla()).then(|| Message::ButtonConfigureProfilePressed);
+                (!profile.is_vanilla()).then_some(Message::ButtonConfigureProfilePressed);
 
             let configure_profile_button = widget::button("Configure Profile")
                 .on_press_maybe(configure_profile_buttton_message)
@@ -511,11 +531,11 @@ impl Application {
         let content = widget::column![controls, body,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
-                SubMenu::NewProfile(m) => m.view().map(|m| m.into()),
-                SubMenu::ConfigureProfile(m) => m.view(&self).map(|m| m.into()),
-                SubMenu::Settings(m) => m.view(&self).map(|m| m.into()),
-                SubMenu::RenameProfile(m) => m.view(&self).map(|m| m.into()),
-                SubMenu::DuplicateProfile(m) => m.view(&self).map(|m| m.into()),
+                SubMenu::NewProfile(m) => m.view(self).map(|m| m.into()),
+                SubMenu::ConfigureProfile(m) => m.view(self).map(|m| m.into()),
+                SubMenu::Settings(m) => m.view(self).map(|m| m.into()),
+                SubMenu::RenameProfile(m) => m.view(self).map(|m| m.into()),
+                SubMenu::DuplicateProfile(m) => m.view(self).map(|m| m.into()),
             })
         });
         let stacked_content = widget::stack(std::iter::once(content.into())).push_maybe(popup);

@@ -10,12 +10,6 @@ pub enum RenameSubmenuMessage {
     Done,
 }
 
-impl Into<Message> for RenameSubmenuMessage {
-    fn into(self) -> Message {
-        Message::RenameProfileMessage(self)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RenameSubmenuData {
     pub name: String,

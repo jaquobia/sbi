@@ -15,12 +15,6 @@ pub enum DuplicateSubmenuMessage {
     Done,
 }
 
-impl Into<Message> for DuplicateSubmenuMessage {
-    fn into(self) -> Message {
-        Message::DuplicateProfileMessage(self)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DuplicateSubmenuData {
     pub original: String,

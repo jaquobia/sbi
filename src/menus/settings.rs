@@ -20,12 +20,6 @@ pub enum SettingsSubmenuMessage {
     ToggleCloseOnLaunch(bool),
 }
 
-impl Into<Message> for SettingsSubmenuMessage {
-    fn into(self) -> Message {
-        Message::SettingsMessage(self)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SettingsSubmenuData {
     pub selected_executable: Option<String>,

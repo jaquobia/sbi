@@ -76,7 +76,7 @@ async fn lauch_game_inner(
     let new_ld_path_var = {
         let mut ld_paths = vec![executable_folder];
         if let Ok(system_ld_path) = std::env::var(OS_LD_LIBRARY_NAME) {
-            ld_paths.extend(std::env::split_paths(&system_ld_path).map(PathBuf::from));
+            ld_paths.extend(std::env::split_paths(&system_ld_path));
         }
         std::env::join_paths(ld_paths).ok()
     };

@@ -14,12 +14,6 @@ pub enum ConfigureProfileSubmenuMessage {
     Delete,
 }
 
-impl Into<Message> for ConfigureProfileSubmenuMessage {
-    fn into(self) -> Message {
-        Message::ConfigureProfileMessage(self)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConfigureProfileSubmenuData {
     profile_copy: ProfileJson,
@@ -53,7 +47,7 @@ impl ConfigureProfileSubmenuData {
         widget::column![
             widget::column![widget::text("Configuring Profile"),].spacing(8),
             widget::checkbox("Link mods", self.profile_copy.link_mods)
-                .on_toggle(|b| M::ToggleLinkModsCheckbox(b)),
+                .on_toggle(M::ToggleLinkModsCheckbox),
             widget::vertical_space(),
             widget::row![
                 widget::button("Close").on_press(M::Exit),

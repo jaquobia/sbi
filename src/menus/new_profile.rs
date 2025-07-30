@@ -2,7 +2,7 @@
 
 use iced::{widget, Element, Task};
 
-use crate::application::Message;
+use crate::application::{Application, Message};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NewProfileSubmenuMessage {
@@ -11,12 +11,6 @@ pub enum NewProfileSubmenuMessage {
     TextFieldEditCollectionID(String),
     ToggleLinkMods(bool),
     CreateProfile,
-}
-
-impl Into<Message> for NewProfileSubmenuMessage {
-    fn into(self) -> Message {
-        Message::NewProfileMessage(self)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -69,7 +63,7 @@ impl NewProfileSubmenuData {
         }
     }
 
-    pub fn view(&self) -> Element<'_, NewProfileSubmenuMessage> {
+    pub fn view<'a>(&'a self, _root: &'a Application) -> Element<'a, NewProfileSubmenuMessage> {
         type M = NewProfileSubmenuMessage;
         let create_button_message = (!self.name.is_empty()).then_some(M::CreateProfile);
         widget::column![
