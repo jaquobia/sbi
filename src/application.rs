@@ -9,16 +9,17 @@ use iced::{
 };
 
 use crate::{
-    config::{self, write_config_to_disk, SBIConfig},
+    config::{self, SBIConfig},
     executable::Executable,
     game_launcher::{self, SBILaunchStatus},
     menus::{
+        configure_profile::{ConfigureProfileSubmenuData, ConfigureProfileSubmenuMessage},
         duplicate_profile::{DuplicateData, DuplicateSubmenuData, DuplicateSubmenuMessage},
+        new_profile::{NewProfileSubmenuData, NewProfileSubmenuMessage},
         rename_profile::{RenameSubmenuData, RenameSubmenuMessage},
-        ConfigureProfileSubmenuData, ConfigureProfileSubmenuMessage, NewProfileSubmenu,
-        NewProfileSubmenuMessage, SettingsSubmenuData, SettingsSubmenuMessage,
+        settings::{SettingsSubmenuData, SettingsSubmenuMessage},
     },
-    profile::{self, Profile, ProfileData, ProfileJson},
+    profile::{self, Profile, ProfileJson},
     SBIDirectories,
 };
 
@@ -26,7 +27,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SubMenu {
-    NewProfile(NewProfileSubmenu),
+    NewProfile(NewProfileSubmenuData),
     ConfigureProfile(ConfigureProfileSubmenuData),
     Settings(SettingsSubmenuData),
     RenameProfile(RenameSubmenuData),
@@ -337,16 +338,24 @@ impl Application {
                     .expect("NEED_EXECUTABLE_SELECTED_TO_LAUNCH_GAME");
                 let vanilla_assets = self.dirs().vanilla_assets().to_path_buf();
                 let vanilla_mods = self.dirs().vanilla_mods().map(|p| p.to_path_buf());
-                let launch_settings = game_launcher::SBILaunchSettings { close_on_launch: self.config.close_on_launch };
+                let launch_settings = game_launcher::SBILaunchSettings {
+                    close_on_launch: self.config.close_on_launch,
+                };
                 log::info!("Launching {} with {:?}", profile.name(), executable);
                 Task::perform(
-                    game_launcher::launch_game(executable, profile, vanilla_mods, vanilla_assets, launch_settings),
+                    game_launcher::launch_game(
+                        executable,
+                        profile,
+                        vanilla_mods,
+                        vanilla_assets,
+                        launch_settings,
+                    ),
                     Message::LaunchedGame,
                 )
             }
             Message::ButtonNewProfilePressed => {
                 log::info!("New profile empty");
-                self.submenu = Some(SubMenu::NewProfile(NewProfileSubmenu::new()));
+                self.submenu = Some(SubMenu::NewProfile(NewProfileSubmenuData::new()));
                 Task::none()
             }
             Message::ButtonRenamePressed => {
@@ -502,8 +511,8 @@ impl Application {
         let content = widget::column![controls, body,].padding(5);
         let popup = self.submenu.as_ref().map(|m| {
             Self::view_submenu(match m {
-                SubMenu::NewProfile(m) => m.view(),
-                SubMenu::ConfigureProfile(m) => m.view(&self),
+                SubMenu::NewProfile(m) => m.view().map(|m| m.into()),
+                SubMenu::ConfigureProfile(m) => m.view(&self).map(|m| m.into()),
                 SubMenu::Settings(m) => m.view(&self).map(|m| m.into()),
                 SubMenu::RenameProfile(m) => m.view(&self).map(|m| m.into()),
                 SubMenu::DuplicateProfile(m) => m.view(&self).map(|m| m.into()),

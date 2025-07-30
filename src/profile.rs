@@ -242,7 +242,7 @@ pub async fn duplicate_profile_then_find_list(
     };
     if let Err(e) = copy_dir_all(&current_path, &new_profile.path).await {
         log::error!(
-            "Error while copying profile {} to {}",
+            "Error {e} while copying profile {} to {}",
             current_path.display(),
             new_profile.path.display()
         );

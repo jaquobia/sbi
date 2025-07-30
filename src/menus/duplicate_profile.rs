@@ -52,7 +52,7 @@ impl DuplicateSubmenuData {
         }
     }
 
-    pub fn view<'a>(&'a self, root: &'a Application) -> Element<'a, DuplicateSubmenuMessage> {
+    pub fn view<'a>(&'a self, _root: &'a Application) -> Element<'a, DuplicateSubmenuMessage> {
         let name_test = self.name.trim();
         let done_button_msg = (!name_test.eq(&self.original)).then_some(DuplicateSubmenuMessage::Done);
         widget::column![

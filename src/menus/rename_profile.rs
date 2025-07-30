@@ -41,7 +41,7 @@ impl RenameSubmenuData {
         }
     }
 
-    pub fn view<'a>(&'a self, root: &'a Application) -> Element<'a, RenameSubmenuMessage> {
+    pub fn view<'a>(&'a self, _root: &'a Application) -> Element<'a, RenameSubmenuMessage> {
         widget::column![
             widget::text("Rename"),
             widget::row![
