@@ -7,8 +7,8 @@ use crate::{
     profile::{Profile, ProfileJson},
 };
 
-pub mod rename_profile;
 pub mod duplicate_profile;
+pub mod rename_profile;
 
 // New Profile Submenu
 
@@ -104,6 +104,7 @@ impl NewProfileSubmenu {
 
 #[derive(Debug, Clone)]
 pub enum SettingsSubmenuMessage {
+    Exit,
     ClickExecutableListItem(String),
     ClickAddExecutableButton,
     ClickRemoveExecutableButton,
@@ -112,6 +113,13 @@ pub enum SettingsSubmenuMessage {
     NewExecutableSelected(Option<PathBuf>),
     ClickNewExecutableAssetsButton,
     NewExecutableAssetsSelected(Option<PathBuf>),
+    ToggleCloseOnLaunch(bool),
+}
+
+impl Into<Message> for SettingsSubmenuMessage {
+    fn into(self) -> Message {
+        Message::SettingsMessage(self)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -133,7 +141,9 @@ impl SettingsSubmenuData {
     }
 
     pub fn update(&mut self, m: SettingsSubmenuMessage) -> Task<Message> {
+        type M = SettingsSubmenuMessage;
         match m {
+            M::Exit => Task::done(Message::ButtonExitSubmenuPressed),
             SettingsSubmenuMessage::ClickExecutableListItem(s) => {
                 self.selected_executable = Some(s);
                 Task::none()
@@ -194,12 +204,16 @@ impl SettingsSubmenuData {
                 }
                 Task::none()
             }
+            SettingsSubmenuMessage::ToggleCloseOnLaunch(state) => {
+                Task::done(Message::ToggleCloseOnLaunch(state))
+            }
         }
     }
 
-    pub fn view<'a>(&'a self, root: &'a Application) -> Element<'a, Message> {
+    pub fn view<'a>(&'a self, root: &'a Application) -> Element<'a, SettingsSubmenuMessage> {
+        type M = SettingsSubmenuMessage;
         let executable_to_element =
-            |(i, executable_name): (usize, &'a String)| -> (usize, Element<'a, Message>) {
+            |(i, executable_name): (usize, &'a String)| -> (usize, Element<'a, SettingsSubmenuMessage>) {
                 let color = self
                     .selected_executable
                     .as_ref()
@@ -208,8 +222,8 @@ impl SettingsSubmenuData {
                 let clickable = widget::mouse_area(widget::row![
                     widget::text(executable_name).color_maybe(color)
                 ])
-                .on_press(Message::SettingsMessage(
-                    SettingsSubmenuMessage::ClickExecutableListItem(executable_name.to_string()),
+                .on_press(M::ClickExecutableListItem(
+                    executable_name.to_string(),
                 ));
                 (i, clickable.into())
             };
@@ -220,14 +234,13 @@ impl SettingsSubmenuData {
                 .map(executable_to_element),
         );
 
-        let add_button_action =
-            (self.new_executable_path.is_some() && !self.new_executable_name.is_empty()).then_some(
-                Message::SettingsMessage(SettingsSubmenuMessage::ClickAddExecutableButton),
-            );
+        let add_button_action = (self.new_executable_path.is_some()
+            && !self.new_executable_name.is_empty())
+        .then_some(M::ClickAddExecutableButton);
         let remove_button_action = self
             .selected_executable
             .as_ref()
-            .map(|_| Message::SettingsMessage(SettingsSubmenuMessage::ClickRemoveExecutableButton));
+            .map(|_| M::ClickRemoveExecutableButton);
 
         widget::column![
             widget::text("Settings"),
@@ -243,25 +256,22 @@ impl SettingsSubmenuData {
                 widget::button("Remove").on_press_maybe(remove_button_action)
             ]
             .spacing(5),
-            widget::text_input("-Name-", &self.new_executable_name).on_input(|s| {
-                Message::SettingsMessage(SettingsSubmenuMessage::NewExecutableNameInput(s))
-            }),
+            widget::text_input("-Name-", &self.new_executable_name)
+                .on_input(|s| { M::NewExecutableNameInput(s) }),
             widget::row![
-                widget::button("Pick Executable").on_press(Message::SettingsMessage(
-                    SettingsSubmenuMessage::ClickNewExecutableButton
-                )),
+                widget::button("Pick Executable").on_press(M::ClickNewExecutableButton),
                 widget::text!("{:?}", self.new_executable_path),
             ]
             .spacing(5),
             widget::row![
-                widget::button("Pick Assets").on_press(Message::SettingsMessage(
-                    SettingsSubmenuMessage::ClickNewExecutableAssetsButton
-                )),
+                widget::button("Pick Assets").on_press(M::ClickNewExecutableAssetsButton),
                 widget::text!("{:?}", self.new_executable_assets),
             ]
             .spacing(5),
+            widget::checkbox("Close on Launch", root.config().close_on_launch)
+                .on_toggle(M::ToggleCloseOnLaunch),
             widget::vertical_space(),
-            widget::button("Close").on_press(Message::ButtonExitSubmenuPressed)
+            widget::button("Close").on_press(M::Exit)
         ]
         .spacing(5)
         .padding(5)

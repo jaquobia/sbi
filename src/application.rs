@@ -56,6 +56,7 @@ pub enum Message {
     ButtonRenamePressed,
     ButtonDuplicatePressed,
     ToggleDebug(bool),
+    ToggleCloseOnLaunch(bool),
     SelectProfile(usize),
     // Submenu messages
     NewProfileMessage(NewProfileSubmenuMessage),
@@ -88,6 +89,9 @@ impl Application {
     }
     pub fn executables(&self) -> &rustc_hash::FxHashMap<String, Executable> {
         &self.config.executables
+    }
+    pub fn config(&self) -> &SBIConfig {
+        &self.config
     }
     pub fn current_profile(&self) -> Option<&Profile> {
         self.selected_profile
@@ -276,6 +280,10 @@ impl Application {
                 self.debug = state;
                 Task::none()
             }
+            Message::ToggleCloseOnLaunch(state) => {
+                self.config.close_on_launch = state;
+                self.write_config_task()
+            }
             Message::SelectExecutable(executable) => {
                 log::info!("Selecting executable: {}", executable);
                 self.config.default_executable = Some(executable.clone());
@@ -329,9 +337,10 @@ impl Application {
                     .expect("NEED_EXECUTABLE_SELECTED_TO_LAUNCH_GAME");
                 let vanilla_assets = self.dirs().vanilla_assets().to_path_buf();
                 let vanilla_mods = self.dirs().vanilla_mods().map(|p| p.to_path_buf());
+                let launch_settings = game_launcher::SBILaunchSettings { close_on_launch: self.config.close_on_launch };
                 log::info!("Launching {} with {:?}", profile.name(), executable);
                 Task::perform(
-                    game_launcher::launch_game(executable, profile, vanilla_mods, vanilla_assets),
+                    game_launcher::launch_game(executable, profile, vanilla_mods, vanilla_assets, launch_settings),
                     Message::LaunchedGame,
                 )
             }
@@ -495,7 +504,7 @@ impl Application {
             Self::view_submenu(match m {
                 SubMenu::NewProfile(m) => m.view(),
                 SubMenu::ConfigureProfile(m) => m.view(&self),
-                SubMenu::Settings(m) => m.view(&self),
+                SubMenu::Settings(m) => m.view(&self).map(|m| m.into()),
                 SubMenu::RenameProfile(m) => m.view(&self).map(|m| m.into()),
                 SubMenu::DuplicateProfile(m) => m.view(&self).map(|m| m.into()),
             })
