@@ -166,19 +166,48 @@ impl SBIDirectories {
     }
 }
 
+// INFO: This does not work exactly, steam seems to ignore the process if it is re-launched, but
+// accepts it if the steam launch option is wrapped. Means that it is probably impossible to fix 
+// the STOP button functionality without generating a launch command for steam,
+// which would then further require a system to locate the necessary steam binaries.
+//
+// #[cfg(not(target_os = "windows"))]
+// fn relaunch(default_command: Vec<String>) {
+//     use std::os::unix::process::CommandExt;
+//     let mut shell_args = vec![String::from("-c")];
+//     shell_args.extend_from_slice(&default_command);
+//     let shell_args: Vec<std::ffi::OsString> = shell_args
+//         .iter()
+//         .map(|s| std::ffi::OsString::from_str(s.as_str()).expect("Couldn't convert to OsString"))
+//         .collect();
+//     let exe_string = std::env::current_exe()
+//         .expect("Cant locate executable??")
+//         .into_os_string();
+//     shell_args.last().replace(&exe_string);
+//     let e = std::process::Command::new("sh").args(shell_args).exec();
+//     log::error!("{e}");
+// }
+
 fn main() -> Result<(), SBIInitializationError> {
+    let cli = CliArgs::parse();
+    // let default_command = cli.default_command.clone();
+    let dirs = SBIDirectories::new(cli)?;
     let _log_handle = flexi_logger::Logger::try_with_env_or_str("info")?
-        // .log_to_file(
-        //     flexi_logger::FileSpec::default()
-        //         .directory(&data_dir)
-        //         .basename("sbi")
-        //         .suppress_timestamp(),
-        // )
+        .log_to_file(
+            flexi_logger::FileSpec::default()
+                .use_timestamp(true)
+                .directory(dirs.data())
+                .basename("sbi")
+                // .suppress_timestamp(),
+        )
         .start()?;
 
-    let cli = CliArgs::parse();
-
-    let dirs = SBIDirectories::new(cli)?;
+    // log::info!("DEFAULT_COMMAND: {:?}", default_command);
+    // #[cfg(not(target_os = "windows"))]
+    // if let Some(cmd) = default_command {
+    //     log::info!("Relaunching as a steam-managed resource...");
+    //     relaunch(cmd);
+    // }
 
     let application = Application::new(dirs);
     let profiles_dir = application.dirs().profiles().to_path_buf();

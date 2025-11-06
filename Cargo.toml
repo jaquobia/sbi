@@ -38,7 +38,7 @@ clap = { version = "4.5", features = ["derive"] }
 
 # Logging
 log = "0.4"
-flexi_logger = "0.30"
+flexi_logger = "0.31"
 
 # Steam APIs
 steamlocate = "2.0.1"
