@@ -10,7 +10,7 @@ use iced::{
 
 use crate::{
     config::{self, SBIConfig},
-    executable::Executable,
+    executable::{Executable, ExecutableVariant},
     game_launcher::{self, SBILaunchStatus},
     menus::{
         configure_profile::{ConfigureProfileSubmenuData, ConfigureProfileSubmenuMessage},
@@ -46,7 +46,7 @@ pub enum Message {
     RenameCurrentProfile(String),
     DuplicateCurrentProfile(DuplicateData),
     DeleteCurrentProfile,
-    CreateExecutable(String, PathBuf, Option<PathBuf>),
+    WriteExecutable(String, Executable),
     RemoveExecutable(String),
     SelectExecutable(String),
     ButtonSettingsPressed,
@@ -116,6 +116,9 @@ impl Application {
     }
     pub fn executables(&self) -> &rustc_hash::FxHashMap<String, Executable> {
         &self.config.executables
+    }
+    pub fn executables_mut(&mut self) -> &mut rustc_hash::FxHashMap<String, Executable> {
+        &mut self.config.executables
     }
     pub fn config(&self) -> &SBIConfig {
         &self.config
@@ -271,16 +274,14 @@ impl Application {
                     Task::none()
                 }
             }
-            Message::CreateExecutable(name, path, assets) => {
+            Message::WriteExecutable(name, executable) => {
                 log::info!(
                     "Creating executable: {}\n\tPath: {}\n\tAssets: {:?}",
                     name,
-                    path.display(),
-                    assets
+                    executable.bin.display(),
+                    executable.assets
                 );
-                self.config
-                    .executables
-                    .insert(name, Executable { bin: path, assets });
+                self.config.executables.insert(name, executable);
                 self.write_config_task()
             }
             Message::RemoveExecutable(name) => {
@@ -417,8 +418,9 @@ impl Application {
                 }
             }
             Message::SettingsMessage(m) => {
+                let dirs = self.dirs().clone();
                 if let Some(SubMenu::Settings(s)) = self.submenu.as_mut() {
-                    s.update(m)
+                    s.update(m, &mut self.config, &dirs)
                 } else {
                     Task::none()
                 }

@@ -53,6 +53,7 @@ pub async fn write_init_config(
             "pathIgnore": [],
             "digestIgnore": [ ".*" ]
         },
+        "includeUGC": false,
         "defaultConfiguration": {
             "allowAdminCommandsFromAnyone": allow_admin_commands_from_anyone,
             "anonymousConnectionsAreAdmin": anonymous_connections_are_admin,
@@ -95,6 +96,11 @@ async fn lauch_game_inner(
         command.env(OS_LD_LIBRARY_NAME, path);
     }
     command.args(["-bootconfig", &bootconfig]);
+    log::info!("Configuring launch parameters");
+    if let crate::executable::ExecutableVariant::XStarbound = executable.variant {
+        log::info!("Launching an XStarbound instance, adding `-noworkshop` to launch args");
+        command.arg("-noworkshop");
+    }
 
     // This little shit line caused me so
     // many issues with zombie processes.

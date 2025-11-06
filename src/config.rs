@@ -12,6 +12,15 @@ pub struct SBIConfig {
     pub close_on_launch: bool,
 }
 
+impl SBIConfig {
+    pub fn get_executable(&self, name: &String) -> Option<&Executable> {
+        self.executables.get(name)
+    }
+    pub fn get_executable_mut(&mut self, name: &String) -> Option<&mut Executable> {
+        self.executables.get_mut(name)
+    }
+}
+
 /// Load config from disk at `dir/config.json`
 /// On error, returns default value for [SBIConfig](crate::config::SBIConfig)
 pub async fn load_config(dir: PathBuf) -> SBIConfig {
