@@ -9,7 +9,7 @@ lto = false
 [dependencies]
 # GUI Toolkit
 iced = { version = "0.13", features = ["tokio"] }
-rfd = { version = "0.15.3" }
+rfd = { version = "0.16" }
 
 # Directory Management
 directories = "6.0"

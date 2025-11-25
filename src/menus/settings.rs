@@ -88,6 +88,8 @@ impl SettingsSubmenuData {
                 self.new_executable_name = s;
                 Task::none()
             }
+            // TODO: Should this be asynchronous?
+            // User can open the picker multiple times...
             SettingsSubmenuMessage::PickExecutableBinary => {
                 async fn pick_executable() -> Option<PathBuf> {
                     let file: Option<rfd::FileHandle> =
@@ -114,6 +116,8 @@ impl SettingsSubmenuData {
                 }
                 Task::none()
             }
+            // TODO: Should this be asynchronous?
+            // User can open the picker multiple times...
             SettingsSubmenuMessage::PickExecutableAssets => {
                 async fn pick_executable_assets() -> Option<PathBuf> {
                     let file: Option<rfd::FileHandle> = rfd::AsyncFileDialog::new()
